@@ -198,4 +198,20 @@ export class RepaymentService {
     }
     return result;
   }
+
+  async getAllRepayments() {
+    const all = await this.repaymentRepo.findAll();
+    const result = [];
+    for (const r of all) {
+      const loanDetails = await this.loanRepo.findById(r.loanId);
+      if (loanDetails) {
+        result.push({
+          repayment: r,
+          loan: loanDetails.loan,
+          user: loanDetails.user,
+        });
+      }
+    }
+    return result;
+  }
 }

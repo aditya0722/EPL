@@ -1,69 +1,36 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, RefreshControl, Platform, Alert, Pressable, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { LoanService, RepaymentService } from '../../api/services';
 import { Timeline } from '../../components/Timeline';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Colors, Brand, Spacing } from '../../constants/theme';
 import { LoadingSkeleton } from '../../components/LoadingSkeleton';
-import { IndianRupee, FileText, Calendar, Clock, CreditCard } from 'lucide-react-native';
+import { IndianRupee, FileText, Calendar, Clock, CreditCard, CheckCircle2, Info, ArrowLeft } from 'lucide-react-native';
 
 export default function LoanDetailsScreen() {
   const { id } = useLocalSearchParams();
+  const router = useRouter();
   const theme = Colors.light;
   const [paying, setPaying] = useState(false);
 
-  const handleMakeRepayment = async () => {
-    let amountToPay = 0;
-    if (Platform.OS === 'web') {
-      const val = window.prompt("Enter amount to repay (INR):", String(repaymentMeta?.outstandingAmount || 0));
-      if (val === null) return;
-      amountToPay = Number(val);
-    } else {
-      const confirmAction = await new Promise<boolean>((resolve) => {
-        Alert.alert(
-          'Confirm Repayment',
-          `Do you want to repay the outstanding balance of ${formatAmount(repaymentMeta?.outstandingAmount || 0)}?`,
-          [
-            { text: 'Cancel', onPress: () => resolve(false), style: 'cancel' },
-            { text: 'Repay Full Amount', onPress: () => { amountToPay = Number(repaymentMeta?.outstandingAmount || 0); resolve(true); } }
-          ]
-        );
-      });
-      if (!confirmAction) return;
-    }
-
-    if (isNaN(amountToPay) || amountToPay <= 0) {
-      Alert.alert('Error', 'Please enter a valid positive payment amount.');
-      return;
-    }
-
-    setPaying(true);
-    try {
-      await RepaymentService.makeRepayment({
-        loanId: loan.id,
-        amount: amountToPay,
-        paymentMethod: 'upi',
-        transactionRef: `TXN-CLIENT-${Date.now()}`,
-        remarks: 'Paid directly from customer app',
-      });
-      Alert.alert('Success', 'Repayment completed successfully!');
-      refetch();
-    } catch (err: any) {
-      Alert.alert('Error', err.friendlyMessage || 'Failed to submit payment.');
-    } finally {
-      setPaying(false);
-    }
+  const formatAmount = (amountVal: number | string) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(Number(amountVal));
   };
 
+  // 1. Fetch live loan details
   const { data: response, isLoading, isError, refetch } = useQuery({
     queryKey: ['loanDetails', id],
     queryFn: async () => {
       const res = await LoanService.getDetails(id as string);
       return res.data;
     },
-    refetchInterval: 15000, // Auto refresh every 15 seconds to pick up admin status changes in real-time
+    refetchInterval: 15000,
   });
 
   const onRefresh = React.useCallback(() => {
@@ -84,6 +51,63 @@ export default function LoanDetailsScreen() {
 
   const { loan, repayments = [], repaymentMeta } = response || {};
 
+  // 2. Dynamic fallback calculations for legacy/null database records
+  const loanAmount = Number(loan?.loanAmount || 0);
+  const totalPayable = Number(loan?.totalPayable) || (loan?.repaymentType === 'emi' ? Math.round(loanAmount * 1.4) : Math.round(loanAmount * 1.08));
+  const totalRepaid = Number(repaymentMeta?.totalRepaid || 0);
+  const outstandingAmount = loan?.status === 'closed' ? 0 : Math.max(0, totalPayable - totalRepaid);
+
+  // 3. Trigger manual client repayment
+  const handleMakeRepayment = async () => {
+    const duration = loan?.loanDuration || 3;
+    const installmentAmount = Math.round(totalPayable / duration) || 1;
+    const amountToPay = loan?.repaymentType === 'emi' ? Math.min(installmentAmount, outstandingAmount) : outstandingAmount;
+
+    if (amountToPay <= 0) {
+      Alert.alert('Info', 'Your loan has already been fully repaid.');
+      return;
+    }
+
+    const confirmMessage = loan?.repaymentType === 'emi'
+      ? `Do you want to pay the monthly installment amount of ${formatAmount(amountToPay)}?`
+      : `Do you want to pay the outstanding balance of ${formatAmount(amountToPay)}?`;
+
+    const confirmAction = await new Promise<boolean>((resolve) => {
+      if (Platform.OS === 'web') {
+        const ok = window.confirm(confirmMessage);
+        resolve(ok);
+      } else {
+        Alert.alert(
+          'Confirm Repayment',
+          confirmMessage,
+          [
+            { text: 'Cancel', onPress: () => resolve(false), style: 'cancel' },
+            { text: 'Confirm & Pay', onPress: () => resolve(true) }
+          ]
+        );
+      }
+    });
+
+    if (!confirmAction) return;
+
+    setPaying(true);
+    try {
+      await RepaymentService.makeRepayment({
+        loanId: loan.id,
+        amount: amountToPay,
+        paymentMethod: 'upi',
+        transactionRef: `TXN-CLIENT-${Date.now()}`,
+        remarks: 'Paid directly from customer app',
+      });
+      Alert.alert('Success', 'Repayment completed successfully!');
+      refetch();
+    } catch (err: any) {
+      Alert.alert('Error', err.friendlyMessage || 'Failed to submit payment.');
+    } finally {
+      setPaying(false);
+    }
+  };
+
   const formatDate = (isoString: string) => {
     const date = new Date(isoString);
     return date.toLocaleDateString('en-IN', {
@@ -93,18 +117,28 @@ export default function LoanDetailsScreen() {
     });
   };
 
-  const formatAmount = (amountVal: number | string) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(Number(amountVal));
-  };
-
   const isRepaymentVisible = ['disbursed', 'closed', 'defaulted'].includes(loan.status);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* HEADER WITH BACK BUTTON */}
+      <View style={styles.headerBar}>
+        <Pressable 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          }} 
+          style={styles.backBtn}
+        >
+          <ArrowLeft size={20} color={theme.text} />
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Application Timeline</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} />}
@@ -168,7 +202,7 @@ export default function LoanDetailsScreen() {
                 <View style={styles.repayCol}>
                   <Text style={[styles.repayLabel, { color: theme.textSecondary }]}>Remaining Outstanding</Text>
                   <Text style={[styles.repayValue, { color: loan.status === 'closed' ? theme.textSecondary : theme.error }]}>
-                    {formatAmount(repaymentMeta?.outstandingAmount || 0)}
+                    {formatAmount(outstandingAmount)}
                   </Text>
                 </View>
               </View>
@@ -185,6 +219,113 @@ export default function LoanDetailsScreen() {
                     <Text style={styles.payNowBtnText}>Repay Loan (Pay Now)</Text>
                   )}
                 </Pressable>
+              )}
+
+              {/* Dynamic Repayment Schedule Breakdown (EMI or Normal) */}
+              {loan.repaymentType === 'emi' && (
+                <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.border }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text, marginBottom: 12 }}>EMI Monthly Breakdown</Text>
+                  {(() => {
+                    const duration = loan.loanDuration || 3;
+                    const installmentAmount = Math.round(totalPayable / duration) || 1;
+
+                    return Array.from({ length: duration }).map((_, idx) => {
+                      const monthNum = idx + 1;
+                      const requiredByThisMonth = installmentAmount * monthNum;
+                      
+                      // Calculate how much has been paid specifically towards this month's installment
+                      let paidForThisMonth = 0;
+                      if (totalRepaid >= requiredByThisMonth) {
+                        paidForThisMonth = installmentAmount;
+                      } else if (totalRepaid > installmentAmount * idx) {
+                        paidForThisMonth = totalRepaid - (installmentAmount * idx);
+                      }
+
+                      const remainingForThisMonth = installmentAmount - paidForThisMonth;
+                      const progress = paidForThisMonth / installmentAmount;
+
+                      // Status styles
+                      let statusText = 'Pending';
+                      let statusColor = '#64748B'; // slate
+                      let progressColor = '#E2E8F0';
+                      let icon = <Clock size={16} color="#64748B" />;
+
+                      if (paidForThisMonth === installmentAmount) {
+                        statusText = 'Paid';
+                        statusColor = '#10B981'; // green
+                        progressColor = '#10B981';
+                        icon = <CheckCircle2 size={16} color="#10B981" />;
+                      } else if (paidForThisMonth > 0) {
+                        statusText = `Partially Paid (₹${remainingForThisMonth.toLocaleString('en-IN')} remaining)`;
+                        statusColor = '#F59E0B'; // orange
+                        progressColor = '#F59E0B';
+                        icon = <Info size={16} color="#F59E0B" />;
+                      }
+
+                      return (
+                        <View key={idx} style={{ marginBottom: 14 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              {icon}
+                              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B', marginLeft: 8 }}>
+                                Month {monthNum} Installment
+                              </Text>
+                            </View>
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: statusColor }}>
+                              {statusText}
+                            </Text>
+                          </View>
+
+                          {/* Progress bar */}
+                          <View style={{ height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
+                            <View style={{ height: '100%', width: `${progress * 100}%`, backgroundColor: progressColor, borderRadius: 3 }} />
+                          </View>
+
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                            <Text style={{ fontSize: 11, color: '#94A3B8' }}>
+                              Paid: {formatAmount(paidForThisMonth)} / {formatAmount(installmentAmount)}
+                            </Text>
+                            {paidForThisMonth > 0 && paidForThisMonth < installmentAmount && (
+                              <Text style={{ fontSize: 11, color: '#94A3B8' }}>
+                                {Math.round(progress * 100)}%
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    });
+                  })()}
+                </View>
+              )}
+
+              {loan.repaymentType !== 'emi' && (
+                <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.border }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text, marginBottom: 12 }}>Repayment Progress</Text>
+                  {(() => {
+                    const totalPayable = Number(loan.totalPayable || 0);
+                    const totalRepaid = Number(repaymentMeta?.totalRepaid || 0);
+                    const progress = Math.min(1, totalRepaid / totalPayable);
+
+                    return (
+                      <View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <Text style={{ fontSize: 12, color: '#64748B' }}>
+                            One-time Payment at end of {loan.loanDuration} Months
+                          </Text>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: totalRepaid === totalPayable ? '#10B981' : '#4F46E5' }}>
+                            {totalRepaid === totalPayable ? 'Fully Paid' : `${Math.round(progress * 100)}% Repaid`}
+                          </Text>
+                        </View>
+                        <View style={{ height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
+                          <View style={{ height: '100%', width: `${progress * 100}%`, backgroundColor: '#4F46E5', borderRadius: 3 }} />
+                        </View>
+                        <Text style={{ fontSize: 11, color: '#94A3B8' }}>
+                          Paid: {formatAmount(totalRepaid)} / {formatAmount(totalPayable)}
+                        </Text>
+                      </View>
+                    );
+                  })()}
+                </View>
               )}
 
               <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -374,6 +515,28 @@ const styles = StyleSheet.create({
   payNowBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 44 : 20,
+    height: Platform.OS === 'ios' ? 90 : 66,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 16,
     fontWeight: '700',
   },
 });

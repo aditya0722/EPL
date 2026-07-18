@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { LoanCard } from '../../components/LoanCard';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { Colors, Brand, Spacing } from '../../constants/theme';
-import { PlusCircle, PhoneCall, ArrowRight, User, Users, Shield, TrendingUp, Landmark, AlertCircle, Calendar, CheckCircle2, XCircle, Check, AlertTriangle, ChevronRight, Clock, Coins, Bell, Flag, FileText as FileTextIcon } from 'lucide-react-native';
+import { PlusCircle, PhoneCall, ArrowRight, User, Users, Shield, TrendingUp, Landmark, AlertCircle, Calendar, CheckCircle2, XCircle, Check, AlertTriangle, ChevronRight, Clock, Coins, Bell, Flag, FileText as FileTextIcon, Info } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LoadingSkeleton } from '../../components/LoadingSkeleton';
 
@@ -443,9 +443,11 @@ export default function HomeScreen() {
     );
   }
 
-  // USER DASHBOARD VIEW
   const { currentLoan, repaymentMeta, notifications } = data;
-  const outstandingAmount = repaymentMeta?.outstandingAmount || 0;
+  const loanAmount = Number(currentLoan?.loanAmount || 0);
+  const totalPayable = Number(currentLoan?.totalPayable) || (currentLoan?.repaymentType === 'emi' ? Math.round(loanAmount * 1.4) : Math.round(loanAmount * 1.08));
+  const totalRepaid = Number(repaymentMeta?.totalRepaid || 0);
+  const outstandingAmount = currentLoan?.status === 'closed' ? 0 : Math.max(0, totalPayable - totalRepaid);
   const unreadNotifs = notifications.filter((n: any) => !n.read).length;
   const firstName = user?.fullName ? user.fullName.split(' ')[0] : 'User';
   const hasActiveLoan = currentLoan && ['pending', 'under_review', 'documents_required', 'approved', 'disbursed'].includes(currentLoan.status);
@@ -476,6 +478,109 @@ export default function HomeScreen() {
         >
           <LoanCard currentLoan={currentLoan} outstandingAmount={outstandingAmount} />
         </Pressable>
+
+        {/* Dynamic Repayment Schedule Breakdown on Dashboard */}
+        {currentLoan && (currentLoan.status === 'disbursed' || currentLoan.status === 'defaulted') && (
+          <View style={styles.repayCard}>
+            <Text style={styles.repayCardTitle}>Repayment Schedule & Progress</Text>
+            
+            {currentLoan.repaymentType === 'emi' ? (
+              (() => {
+                const duration = currentLoan.loanDuration || 3;
+                const loanAmount = Number(currentLoan.loanAmount || 0);
+                // Fallback calculations for totalPayable
+                const totalPayable = Number(currentLoan.totalPayable) || Math.round(loanAmount * 1.4);
+                const totalRepaid = Number(repaymentMeta?.totalRepaid || 0);
+                const installmentAmount = Math.round(totalPayable / duration) || 1;
+
+                return Array.from({ length: duration }).map((_, idx) => {
+                  const monthNum = idx + 1;
+                  const requiredByThisMonth = installmentAmount * monthNum;
+                  
+                  let paidForThisMonth = 0;
+                  if (totalRepaid >= requiredByThisMonth) {
+                    paidForThisMonth = installmentAmount;
+                  } else if (totalRepaid > installmentAmount * idx) {
+                    paidForThisMonth = totalRepaid - (installmentAmount * idx);
+                  }
+
+                  const remainingForThisMonth = installmentAmount - paidForThisMonth;
+                  const progress = paidForThisMonth / installmentAmount;
+
+                  let statusText = 'Pending';
+                  let statusColor = '#64748B'; 
+                  let progressColor = '#E2E8F0';
+                  let icon = <Clock size={16} color="#64748B" />;
+
+                  if (paidForThisMonth === installmentAmount) {
+                    statusText = 'Paid';
+                    statusColor = '#10B981';
+                    progressColor = '#10B981';
+                    icon = <CheckCircle2 size={16} color="#10B981" />;
+                  } else if (paidForThisMonth > 0) {
+                    statusText = `Partially Paid (₹${remainingForThisMonth.toLocaleString('en-IN')} remaining)`;
+                    statusColor = '#F59E0B';
+                    progressColor = '#F59E0B';
+                    icon = <Info size={16} color="#F59E0B" />;
+                  }
+
+                  return (
+                    <View key={idx} style={{ marginBottom: 14 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          {icon}
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B', marginLeft: 8 }}>
+                            Month {monthNum} Installment
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: statusColor }}>
+                          {statusText}
+                        </Text>
+                      </View>
+
+                      {/* Progress bar */}
+                      <View style={{ height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
+                        <View style={{ height: '100%', width: `${progress * 100}%`, backgroundColor: progressColor, borderRadius: 3 }} />
+                      </View>
+
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={{ fontSize: 11, color: '#94A3B8' }}>
+                          Paid: {formatCurrency(paidForThisMonth)} / {formatCurrency(installmentAmount)}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                });
+              })()
+            ) : (
+              (() => {
+                const loanAmount = Number(currentLoan.loanAmount || 0);
+                const totalPayable = Number(currentLoan.totalPayable) || Math.round(loanAmount * 1.08);
+                const totalRepaid = Number(repaymentMeta?.totalRepaid || 0);
+                const progress = Math.min(1, totalRepaid / totalPayable);
+
+                return (
+                  <View style={{ marginTop: 4 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <Text style={{ fontSize: 12, color: '#64748B' }}>
+                        One-time Payment at end of {currentLoan.loanDuration} Months
+                      </Text>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: totalRepaid === totalPayable ? '#10B981' : '#4F46E5' }}>
+                        {totalRepaid === totalPayable ? 'Fully Paid' : `${Math.round(progress * 100)}% Repaid`}
+                      </Text>
+                    </View>
+                    <View style={{ height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
+                      <View style={{ height: '100%', width: `${progress * 100}%`, backgroundColor: '#4F46E5', borderRadius: 3 }} />
+                    </View>
+                    <Text style={{ fontSize: 11, color: '#94A3B8' }}>
+                      Paid: {formatCurrency(totalRepaid)} / {formatCurrency(totalPayable)}
+                    </Text>
+                  </View>
+                );
+              })()
+            )}
+          </View>
+        )}
 
         {!hasActiveLoan ? (
           <View style={styles.actionCard}>
@@ -1269,6 +1374,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#94A3B8',
     marginTop: 8,
+  },
+  repayCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: 'rgba(0,0,0,0.03)',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  repayCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 16,
   },
 });
 

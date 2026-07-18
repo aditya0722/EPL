@@ -72,4 +72,11 @@ export class RepaymentRepository {
       .where(eq(repayments.status, "pending"))
       .orderBy(desc(repayments.createdAt));
   }
+
+  async findAll() {
+    return this.db
+      .select()
+      .from(repayments)
+      .orderBy(desc(repayments.createdAt));
+  }
 }

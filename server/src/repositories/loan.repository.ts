@@ -15,12 +15,7 @@ export class LoanRepository {
     const result = await this.db
       .select({
         loan: loans,
-        user: {
-          id: users.id,
-          fullName: users.fullName,
-          email: users.email,
-          mobileNumber: users.mobileNumber,
-        },
+        user: users,
       })
       .from(loans)
       .innerJoin(users, eq(loans.userId, users.id))
@@ -115,12 +110,7 @@ export class LoanRepository {
     return this.db
       .select({
         loan: loans,
-        user: {
-          id: users.id,
-          fullName: users.fullName,
-          email: users.email,
-          mobileNumber: users.mobileNumber,
-        },
+        user: users,
       })
       .from(loans)
       .innerJoin(users, eq(loans.userId, users.id))

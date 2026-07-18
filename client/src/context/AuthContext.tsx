@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { AuthService, UserService, UserProfile } from '../api/services';
-import { setInMemoryTokens } from '../api/client';
+import { setInMemoryTokens, setOnLogoutCallback } from '../api/client';
 import { tokenStorage } from '../utils/storage';
 
 interface AuthContextType {
@@ -22,6 +22,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Initialize Auth State from Storage
   useEffect(() => {
+    setOnLogoutCallback(() => {
+      setUser(null);
+      setIsAuthenticated(false);
+    });
+
     const bootstrapAsync = async () => {
       try {
         const accessToken = await tokenStorage.getItem('access_token');

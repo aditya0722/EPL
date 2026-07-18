@@ -22,7 +22,7 @@ export default function AdminScreen() {
   const theme = Colors.light;
   const params = useLocalSearchParams();
 
-  const [activeTab, setActiveTab] = useState<TabType>('loans');
+  const [activeTab, setActiveTab] = useState<TabType>('kyc');
   const [loans, setLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,6 +35,13 @@ export default function AdminScreen() {
 
   // Pending User Repayments States
   const [pendingRepayments, setPendingRepayments] = useState<any[]>([]);
+  
+  // All Repayments History States
+  const [allRepayments, setAllRepayments] = useState<any[]>([]);
+  const [paymentsSubTab, setPaymentsSubTab] = useState<'pending' | 'history'>('pending');
+  const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all');
+  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null);
 
   // Search & Filter Query
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,8 +65,13 @@ export default function AdminScreen() {
   useEffect(() => {
     if (params.tab && typeof params.tab === 'string') {
       setActiveTab(params.tab as TabType);
+      if (params.tab === 'repayments') {
+        if (params.loanId) setLoanId(params.loanId as string);
+        if (params.clientName) setSelectedClientName(params.clientName as string);
+        if (params.clientMeta) setSelectedClientMeta(params.clientMeta as string);
+      }
     }
-  }, [params.tab]);
+  }, [params.tab, params.loanId, params.clientName, params.clientMeta]);
 
   // Load Admin Loans
   const loadLoans = async () => {
@@ -100,6 +112,19 @@ export default function AdminScreen() {
     }
   };
 
+  // Load All Repayments (History)
+  const loadAllRepayments = async () => {
+    setLoading(true);
+    try {
+      const res = await AdminService.getRepayments();
+      setAllRepayments(res.data || []);
+    } catch (err: any) {
+      Alert.alert('Error', err.friendlyMessage || 'Failed to fetch payments history.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Load documents for a specific user
   const loadUserDocs = async (userId: string) => {
     setLoadingDocs(true);
@@ -118,6 +143,7 @@ export default function AdminScreen() {
       loadLoans();
       loadKycUsers();
       loadPendingRepayments();
+      loadAllRepayments();
     }
   }, [user]);
 
@@ -127,7 +153,10 @@ export default function AdminScreen() {
     try {
       if (activeTab === 'loans') await loadLoans();
       if (activeTab === 'kyc') await loadKycUsers();
-      if (activeTab === 'verify_payments') await loadPendingRepayments();
+      if (activeTab === 'verify_payments') {
+        await loadPendingRepayments();
+        await loadAllRepayments();
+      }
     } finally {
       setRefreshing(false);
     }
@@ -142,7 +171,10 @@ export default function AdminScreen() {
       setSelectedUser(null);
       loadKycUsers();
     }
-    if (tab === 'verify_payments') loadPendingRepayments();
+    if (tab === 'verify_payments') {
+      loadPendingRepayments();
+      loadAllRepayments();
+    }
   };
 
   // Handle status update (Approve, Disburse, Reject)
@@ -439,6 +471,44 @@ export default function AdminScreen() {
     });
   }, [loans, loanFilter, searchQuery]);
 
+  // Filtered payments history
+  const filteredAllRepayments = useMemo(() => {
+    return allRepayments.filter((item) => {
+      const { repayment, user: client } = item;
+      if (paymentStatusFilter !== 'all' && repayment.status !== paymentStatusFilter) return false;
+      if (paymentSearchQuery.trim().length > 0) {
+        const q = paymentSearchQuery.toLowerCase();
+        return (
+          client.fullName?.toLowerCase().includes(q) ||
+          client.mobileNumber?.includes(q) ||
+          repayment.transactionRef?.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [allRepayments, paymentStatusFilter, paymentSearchQuery]);
+
+  // Payment history metrics
+  const repaymentStats = useMemo(() => {
+    let totalCollected = 0;
+    let pendingVerification = 0;
+    let failedCount = 0;
+
+    allRepayments.forEach((item) => {
+      const { repayment } = item;
+      const amt = Number(repayment.amount || 0);
+      if (repayment.status === 'completed') {
+        totalCollected += amt;
+      } else if (repayment.status === 'pending') {
+        pendingVerification += amt;
+      } else if (repayment.status === 'failed') {
+        failedCount += 1;
+      }
+    });
+
+    return { totalCollected, pendingVerification, failedCount };
+  }, [allRepayments]);
+
   // Tab badge counts
   const tabBadges = {
     loans: filterCounts['pending'] || 0,
@@ -468,9 +538,7 @@ export default function AdminScreen() {
 
   // Tab config
   const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
-    { key: 'loans', label: 'Applications', icon: <FileText size={16} color={activeTab === 'loans' ? '#FFF' : '#64748B'} /> },
     { key: 'kyc', label: 'KYC', icon: <Shield size={16} color={activeTab === 'kyc' ? '#FFF' : '#64748B'} /> },
-    { key: 'verify_payments', label: 'Verify', icon: <CheckCircle2 size={16} color={activeTab === 'verify_payments' ? '#FFF' : '#64748B'} /> },
     { key: 'repayments', label: 'Record', icon: <Coins size={16} color={activeTab === 'repayments' ? '#FFF' : '#64748B'} /> },
   ];
 
@@ -563,7 +631,7 @@ export default function AdminScreen() {
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollRow}>
-              {(['pending', 'approved', 'disbursed', 'rejected', 'closed', 'all'] as const).map((filter) => {
+              {(['all', 'pending', 'approved', 'disbursed', 'rejected', 'closed'] as const).map((filter) => {
                 const isActive = loanFilter === filter;
                 const count = filterCounts[filter] || 0;
                 return (
@@ -653,12 +721,8 @@ export default function AdminScreen() {
                     {isExpanded && (
                       <View style={styles.expandedSection}>
                         <View style={styles.expandDivider} />
-
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                          <Mail size={12} color="#64748B" style={{ marginRight: 6 }} />
-                          <Text style={{ fontSize: 12, color: '#64748B' }}>{client.email}</Text>
-                        </View>
-
+                        {/* SECTION 1: LOAN DETAILS */}
+                        <Text style={styles.detailSectionHeader}>Loan Details</Text>
                         <View style={styles.detailGrid}>
                           <View style={styles.detailItem}>
                             <Text style={styles.detailLabel}>Principal</Text>
@@ -677,8 +741,90 @@ export default function AdminScreen() {
                             <Text style={styles.detailValue}>{loan.repaymentType === 'emi' ? 'Monthly EMI' : 'Full Payment'}</Text>
                           </View>
                         </View>
+                        <Text style={[styles.loanIdLabel, { marginBottom: 12 }]}>Loan ID: {loan.id}</Text>
 
-                        <Text style={styles.loanIdLabel}>ID: {loan.id}</Text>
+                        {/* SECTION 2: EMI DETAILS (IF EMI) */}
+                        {loan.repaymentType === 'emi' && (
+                          <View style={{ marginBottom: 14 }}>
+                            <Text style={styles.detailSectionHeader}>EMI Installment Details</Text>
+                            <View style={[styles.emiDetailsCard, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' }]}>
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <View>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#4F46E5', textTransform: 'uppercase' }}>Monthly Installment</Text>
+                                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#4F46E5', marginTop: 2 }}>
+                                    {formatCurrency(Math.round(Number(loan.totalPayable) / loan.loanDuration))} / Month
+                                  </Text>
+                                </View>
+                                <View style={{ alignItems: 'flex-end' }}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Tenure</Text>
+                                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B', marginTop: 2 }}>{loan.loanDuration} Months</Text>
+                                </View>
+                              </View>
+                            </View>
+                          </View>
+                        )}
+
+                        {/* SECTION 3: BORROWER HOLDER DETAILS */}
+                        <Text style={styles.detailSectionHeader}>Borrower / Holder Details</Text>
+                        <View style={styles.holderDetailsBox}>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>Full Name</Text>
+                            <Text style={styles.detailRowVal}>{client.fullName || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>Email Address</Text>
+                            <Text style={styles.detailRowVal} numberOfLines={1}>{client.email}</Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>Mobile Number</Text>
+                            <Text style={styles.detailRowVal}>{client.mobileNumber || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>Date of Birth</Text>
+                            <Text style={styles.detailRowVal}>
+                              {client.dob ? new Date(client.dob).toLocaleDateString('en-IN') : 'N/A'}
+                            </Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>Monthly Income</Text>
+                            <Text style={styles.detailRowVal}>
+                              {client.monthlyIncome ? formatCurrency(client.monthlyIncome) : 'N/A'}
+                            </Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>PAN Number</Text>
+                            <Text style={styles.detailRowVal}>{client.panNumber || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>Aadhaar Number</Text>
+                            <Text style={styles.detailRowVal}>{client.aadhaarNumber || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>Address</Text>
+                            <Text style={[styles.detailRowVal, { maxWidth: '60%' }]} numberOfLines={2}>
+                              {client.address ? `${client.address}, ${client.district || ''}, ${client.state || ''} - ${client.pincode || ''}` : 'N/A'}
+                            </Text>
+                          </View>
+
+                          {/* Banking Info */}
+                          <Text style={[styles.detailRowSectionTitle, { marginTop: 10 }]}>Bank Account Details</Text>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>Bank Name</Text>
+                            <Text style={styles.detailRowVal}>{client.bankName || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>Account Number</Text>
+                            <Text style={styles.detailRowVal}>{client.bankAccountNo || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>IFSC Code</Text>
+                            <Text style={styles.detailRowVal}>{client.bankIfsc || 'N/A'}</Text>
+                          </View>
+                          <View style={styles.detailRowItem}>
+                            <Text style={styles.detailRowLabel}>UPI ID</Text>
+                            <Text style={styles.detailRowVal}>{client.upiId || 'N/A'}</Text>
+                          </View>
+                        </View>
 
                         {/* Action Buttons */}
                         <View style={styles.actionRow}>
@@ -887,128 +1033,347 @@ export default function AdminScreen() {
           )
         )}
 
-        {/* ==================== TAB 3: VERIFY PAYMENTS ==================== */}
+        {/* ==================== TAB 3: PAYMENTS HUB ==================== */}
         {activeTab === 'verify_payments' && (
           <View>
-            {/* Summary Banner */}
-            {pendingRepayments.length > 0 && (
-              <View style={[styles.summaryBanner, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
-                <CreditCard size={18} color="#059669" style={{ marginRight: 10 }} />
-                <Text style={[styles.summaryBannerText, { color: '#065F46' }]}>
-                  <Text style={{ fontWeight: '800' }}>{pendingRepayments.length}</Text> payment{pendingRepayments.length > 1 ? 's' : ''} awaiting verification
+            {/* Sub Tabs Segmented Control */}
+            <View style={styles.subTabBar}>
+              <Pressable
+                style={[styles.subTabItem, paymentsSubTab === 'pending' && styles.subTabItemActive]}
+                onPress={() => setPaymentsSubTab('pending')}
+              >
+                <Text style={[styles.subTabText, paymentsSubTab === 'pending' && styles.subTabTextActive]}>
+                  Queue ({pendingRepayments.length})
                 </Text>
-              </View>
-            )}
+              </Pressable>
+              <Pressable
+                style={[styles.subTabItem, paymentsSubTab === 'history' && styles.subTabItemActive]}
+                onPress={() => setPaymentsSubTab('history')}
+              >
+                <Text style={[styles.subTabText, paymentsSubTab === 'history' && styles.subTabTextActive]}>
+                  History ({allRepayments.length})
+                </Text>
+              </Pressable>
+            </View>
 
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#4F46E5" />
-                <Text style={styles.loadingText}>Loading payments...</Text>
-              </View>
-            ) : pendingRepayments.length === 0 ? (
-              <View style={styles.emptyState}>
-                <CheckCircle2 size={40} color="#CBD5E1" />
-                <Text style={styles.emptyTitle}>No Pending Payments</Text>
-                <Text style={styles.emptyDesc}>All repayments have been verified.</Text>
+            {paymentsSubTab === 'pending' ? (
+              // Verification Queue
+              <View>
+                {pendingRepayments.length > 0 && (
+                  <View style={[styles.summaryBanner, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0', marginBottom: 12 }]}>
+                    <CreditCard size={18} color="#059669" style={{ marginRight: 10 }} />
+                    <Text style={[styles.summaryBannerText, { color: '#065F46' }]}>
+                      <Text style={{ fontWeight: '800' }}>{pendingRepayments.length}</Text> payment{pendingRepayments.length > 1 ? 's' : ''} awaiting verification
+                    </Text>
+                  </View>
+                )}
+
+                {loading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#4F46E5" />
+                    <Text style={styles.loadingText}>Loading payments...</Text>
+                  </View>
+                ) : pendingRepayments.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <CheckCircle2 size={40} color="#CBD5E1" />
+                    <Text style={styles.emptyTitle}>All caught up!</Text>
+                    <Text style={styles.emptyDesc}>No pending repayments to verify.</Text>
+                  </View>
+                ) : (
+                  pendingRepayments.map((item) => {
+                    const { repayment, user: client, loan } = item;
+                    const dateStr = new Date(repayment.paymentDate).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric'
+                    });
+
+                    return (
+                      <View key={repayment.id} style={styles.paymentCard}>
+                        {/* Client Info */}
+                        <View style={styles.paymentCardHeader}>
+                          <View style={styles.paymentAvatarCircle}>
+                            <Text style={styles.paymentAvatarText}>{getInitials(client.fullName)}</Text>
+                          </View>
+                          <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={styles.paymentClientName}>{client.fullName}</Text>
+                            <Text style={styles.paymentClientMeta}>{client.email} • {client.mobileNumber}</Text>
+                          </View>
+                          <View style={[styles.statusBadge, { backgroundColor: '#FEF3C7' }]}>
+                            <Text style={[styles.statusBadgeText, { color: '#D97706' }]}>PENDING</Text>
+                          </View>
+                        </View>
+
+                        {/* Amount Highlight */}
+                        <View style={styles.paymentAmountCard}>
+                          <View>
+                            <Text style={styles.paymentAmountLabel}>Amount Paid</Text>
+                            <Text style={styles.paymentAmountValue}>{formatCurrency(repayment.amount)}</Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={styles.paymentAmountLabel}>Payment Date</Text>
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#334155' }}>{dateStr}</Text>
+                          </View>
+                        </View>
+
+                        {/* Payment Details */}
+                        <View style={styles.paymentDetailsBox}>
+                          <View style={styles.paymentDetailRow}>
+                            <Text style={styles.paymentDetailLabel}>UTR / Txn Ref</Text>
+                            <Text style={styles.paymentDetailValue}>{repayment.transactionRef}</Text>
+                          </View>
+                          <View style={styles.paymentDetailRow}>
+                            <Text style={styles.paymentDetailLabel}>Payment Method</Text>
+                            <Text style={styles.paymentDetailValue}>{repayment.paymentMethod.toUpperCase().replace('_', ' ')}</Text>
+                          </View>
+                          <View style={styles.paymentDetailRow}>
+                            <Text style={styles.paymentDetailLabel}>Loan Purpose</Text>
+                            <Text style={styles.paymentDetailValue}>{loan.loanPurpose} ({formatCurrency(loan.loanAmount)})</Text>
+                          </View>
+                          {repayment.remarks && (
+                            <View style={styles.paymentDetailRow}>
+                              <Text style={styles.paymentDetailLabel}>User Remarks</Text>
+                              <Text style={[styles.paymentDetailValue, { fontStyle: 'italic' }]}>{repayment.remarks}</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* Receipt Screenshot */}
+                        {repayment.screenshotUrl ? (
+                          <View style={styles.receiptContainer}>
+                            <Text style={styles.receiptLabel}>Uploaded Receipt</Text>
+                            <View style={styles.receiptFrame}>
+                              <Image
+                                source={{ uri: repayment.screenshotUrl }}
+                                style={styles.receiptImage}
+                                resizeMode="contain"
+                              />
+                            </View>
+                          </View>
+                        ) : (
+                          <View style={styles.noReceiptBox}>
+                            <AlertCircle size={14} color="#94A3B8" style={{ marginRight: 6 }} />
+                            <Text style={styles.noReceiptText}>No receipt screenshot uploaded</Text>
+                          </View>
+                        )}
+
+                        {/* Action Buttons */}
+                        <View style={styles.actionRow}>
+                          <Pressable
+                            style={[styles.actionBtn, styles.approveBtn]}
+                            onPress={() => handleVerifyRepayment(repayment.id, 'completed')}
+                          >
+                            <CheckCircle2 size={15} color="#FFF" style={{ marginRight: 5 }} />
+                            <Text style={styles.actionBtnText}>Approve Payment</Text>
+                          </Pressable>
+                          <Pressable
+                            style={[styles.actionBtn, styles.rejectBtn]}
+                            onPress={() => handleVerifyRepayment(repayment.id, 'failed')}
+                          >
+                            <XCircle size={15} color="#FFF" style={{ marginRight: 5 }} />
+                            <Text style={styles.actionBtnText}>Reject</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
               </View>
             ) : (
-              pendingRepayments.map((item) => {
-                const { repayment, user: client, loan } = item;
-                const dateStr = new Date(repayment.paymentDate).toLocaleDateString('en-IN', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric'
-                });
-
-                return (
-                  <View key={repayment.id} style={styles.paymentCard}>
-                    {/* Client Info */}
-                    <View style={styles.paymentCardHeader}>
-                      <View style={styles.paymentAvatarCircle}>
-                        <Text style={styles.paymentAvatarText}>{getInitials(client.fullName)}</Text>
-                      </View>
-                      <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text style={styles.paymentClientName}>{client.fullName}</Text>
-                        <Text style={styles.paymentClientMeta}>{client.email}</Text>
-                      </View>
-                      <View style={[styles.statusBadge, { backgroundColor: '#FEF3C7' }]}>
-                        <Text style={[styles.statusBadgeText, { color: '#D97706' }]}>PENDING</Text>
-                      </View>
-                    </View>
-
-                    {/* Amount Highlight */}
-                    <View style={styles.paymentAmountCard}>
-                      <View>
-                        <Text style={styles.paymentAmountLabel}>Amount Paid</Text>
-                        <Text style={styles.paymentAmountValue}>{formatCurrency(repayment.amount)}</Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={styles.paymentAmountLabel}>Date</Text>
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#334155' }}>{dateStr}</Text>
-                      </View>
-                    </View>
-
-                    {/* Payment Details */}
-                    <View style={styles.paymentDetailsBox}>
-                      <View style={styles.paymentDetailRow}>
-                        <Text style={styles.paymentDetailLabel}>UTR / Txn Ref</Text>
-                        <Text style={styles.paymentDetailValue}>{repayment.transactionRef}</Text>
-                      </View>
-                      <View style={styles.paymentDetailRow}>
-                        <Text style={styles.paymentDetailLabel}>Method</Text>
-                        <Text style={styles.paymentDetailValue}>{repayment.paymentMethod.toUpperCase().replace('_', ' ')}</Text>
-                      </View>
-                      <View style={styles.paymentDetailRow}>
-                        <Text style={styles.paymentDetailLabel}>Loan Purpose</Text>
-                        <Text style={styles.paymentDetailValue}>{loan.loanPurpose}</Text>
-                      </View>
-                      {repayment.remarks && (
-                        <View style={styles.paymentDetailRow}>
-                          <Text style={styles.paymentDetailLabel}>User Notes</Text>
-                          <Text style={[styles.paymentDetailValue, { fontStyle: 'italic' }]}>{repayment.remarks}</Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Receipt Screenshot */}
-                    {repayment.screenshotUrl ? (
-                      <View style={styles.receiptContainer}>
-                        <Text style={styles.receiptLabel}>Payment Receipt</Text>
-                        <View style={styles.receiptFrame}>
-                          <Image
-                            source={{ uri: repayment.screenshotUrl }}
-                            style={styles.receiptImage}
-                            resizeMode="contain"
-                          />
-                        </View>
-                      </View>
-                    ) : (
-                      <View style={styles.noReceiptBox}>
-                        <AlertCircle size={14} color="#94A3B8" style={{ marginRight: 6 }} />
-                        <Text style={styles.noReceiptText}>No receipt screenshot uploaded</Text>
-                      </View>
-                    )}
-
-                    {/* Action Buttons */}
-                    <View style={styles.actionRow}>
-                      <Pressable
-                        style={[styles.actionBtn, styles.approveBtn]}
-                        onPress={() => handleVerifyRepayment(repayment.id, 'completed')}
-                      >
-                        <CheckCircle2 size={15} color="#FFF" style={{ marginRight: 5 }} />
-                        <Text style={styles.actionBtnText}>Approve</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.actionBtn, styles.rejectBtn]}
-                        onPress={() => handleVerifyRepayment(repayment.id, 'failed')}
-                      >
-                        <XCircle size={15} color="#FFF" style={{ marginRight: 5 }} />
-                        <Text style={styles.actionBtnText}>Reject</Text>
-                      </Pressable>
-                    </View>
+              // Transaction History
+              <View>
+                {/* Collections Dashboard Widget */}
+                <View style={styles.metricsContainer}>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Total Collections</Text>
+                    <Text style={[styles.metricValue, { color: '#10B981' }]}>
+                      {formatCurrency(repaymentStats.totalCollected)}
+                    </Text>
                   </View>
-                );
-              })
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Pending Verification</Text>
+                    <Text style={[styles.metricValue, { color: '#F59E0B' }]}>
+                      {formatCurrency(repaymentStats.pendingVerification)}
+                    </Text>
+                  </View>
+                  <View style={styles.metricCard}>
+                    <Text style={styles.metricLabel}>Rejected Payments</Text>
+                    <Text style={[styles.metricValue, { color: '#EF4444' }]}>
+                      {repaymentStats.failedCount} Txns
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Search History */}
+                <View style={[styles.searchContainer, { marginBottom: 12 }]}>
+                  <Search size={18} color="#94A3B8" style={{ marginRight: 8 }} />
+                  <TextInput
+                    placeholder="Search by name, phone, or UTR..."
+                    value={paymentSearchQuery}
+                    onChangeText={setPaymentSearchQuery}
+                    placeholderTextColor="#94A3B8"
+                    style={styles.searchInput}
+                  />
+                  {paymentSearchQuery.length > 0 && (
+                    <Pressable onPress={() => setPaymentSearchQuery('')}>
+                      <X size={16} color="#94A3B8" />
+                    </Pressable>
+                  )}
+                </View>
+
+                {/* Filters */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollRow}>
+                  {(['all', 'completed', 'pending', 'failed'] as const).map((filter) => {
+                    const isActive = paymentStatusFilter === filter;
+                    const labels: Record<string, string> = {
+                      all: 'All Statuses',
+                      completed: 'Completed',
+                      pending: 'Pending',
+                      failed: 'Rejected'
+                    };
+                    return (
+                      <Pressable
+                        key={filter}
+                        onPress={() => setPaymentStatusFilter(filter)}
+                        style={[styles.filterChip, isActive && styles.filterChipActive]}
+                      >
+                        <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                          {labels[filter]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                {loading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#4F46E5" />
+                    <Text style={styles.loadingText}>Loading payments history...</Text>
+                  </View>
+                ) : filteredAllRepayments.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Coins size={40} color="#CBD5E1" />
+                    <Text style={styles.emptyTitle}>No Payments Found</Text>
+                    <Text style={styles.emptyDesc}>Try adjusting your search query or status filter.</Text>
+                  </View>
+                ) : (
+                  filteredAllRepayments.map((item) => {
+                    const { repayment, user: client, loan } = item;
+                    const isExpanded = expandedPaymentId === repayment.id;
+                    const dateStr = new Date(repayment.paymentDate).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric'
+                    });
+                    const timeStr = new Date(repayment.paymentDate).toLocaleTimeString('en-IN', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
+
+                    // Set icon/bg by status
+                    let statusBg = '#DEF7EC'; // completed green
+                    let statusColor = '#03543F';
+                    let avatarBg = '#E0F2FE'; // light blue
+                    let avatarIconColor = '#0284C7';
+
+                    if (repayment.status === 'pending') {
+                      statusBg = '#FEF3C7'; // pending yellow
+                      statusColor = '#D97706';
+                      avatarBg = '#FFFBEB'; // light yellow
+                      avatarIconColor = '#D97706';
+                    } else if (repayment.status === 'failed') {
+                      statusBg = '#FDE8E8'; // rejected red
+                      statusColor = '#9B1C1C';
+                      avatarBg = '#FDF2F2'; // light red
+                      avatarIconColor = '#EF4444';
+                    }
+
+                    return (
+                      <Pressable
+                        key={repayment.id}
+                        style={[styles.loanCard, { paddingVertical: 14 }]}
+                        onPress={() => setExpandedPaymentId(isExpanded ? null : repayment.id)}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          {/* Method-based Avatar */}
+                          <View style={[styles.loanAvatarCircle, { backgroundColor: avatarBg }]}>
+                            {repayment.paymentMethod === 'upi' ? (
+                              <Wallet size={18} color={avatarIconColor} />
+                            ) : repayment.paymentMethod === 'bank_transfer' ? (
+                              <Landmark size={18} color={avatarIconColor} />
+                            ) : repayment.paymentMethod === 'cash' ? (
+                              <Banknote size={18} color={avatarIconColor} />
+                            ) : (
+                              <CreditCard size={18} color={avatarIconColor} />
+                            )}
+                          </View>
+
+                          <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={styles.loanClientName} numberOfLines={1}>{client.fullName}</Text>
+                            <Text style={styles.loanClientPhone}>{dateStr} • {timeStr}</Text>
+                          </View>
+
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={[styles.loanAmountCompact, { color: repayment.status === 'completed' ? '#10B981' : '#1E293B', marginBottom: 2 }]}>
+                              {repayment.status === 'completed' ? '+' : ''} {formatCurrency(repayment.amount)}
+                            </Text>
+                            <View style={[styles.statusBadge, { backgroundColor: statusBg, paddingHorizontal: 6, paddingVertical: 2 }]}>
+                              <Text style={[styles.statusBadgeText, { color: statusColor, fontSize: 8 }]}>
+                                {repayment.status === 'completed' ? 'SUCCESS' : repayment.status === 'failed' ? 'REJECTED' : 'PENDING'}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Collapsible details for history list */}
+                        {isExpanded && (
+                          <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' }}>
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
+                              <View style={{ width: '45%' }}>
+                                <Text style={styles.detailLabel}>UTR / transaction id</Text>
+                                <Text style={[styles.detailValue, { fontSize: 11 }]}>{repayment.transactionRef || 'N/A'}</Text>
+                              </View>
+                              <View style={{ width: '45%' }}>
+                                <Text style={styles.detailLabel}>payment method</Text>
+                                <Text style={styles.detailValue}>{repayment.paymentMethod.toUpperCase().replace('_', ' ')}</Text>
+                              </View>
+                              <View style={{ width: '45%' }}>
+                                <Text style={styles.detailLabel}>associated loan</Text>
+                                <Text style={[styles.detailValue, { fontSize: 11 }]}>{loan.loanPurpose} ({formatCurrency(loan.loanAmount)})</Text>
+                              </View>
+                              <View style={{ width: '45%' }}>
+                                <Text style={styles.detailLabel}>client contact</Text>
+                                <Text style={styles.detailValue}>{client.mobileNumber}</Text>
+                              </View>
+                            </View>
+
+                            {repayment.remarks && (
+                              <View style={{ backgroundColor: '#F8FAFC', padding: 10, borderRadius: 8, marginTop: 4 }}>
+                                <Text style={styles.detailLabel}>remarks / audit log</Text>
+                                <Text style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{repayment.remarks}</Text>
+                              </View>
+                            )}
+
+                            {/* View Screenshot option */}
+                            {repayment.screenshotUrl && (
+                              <View style={{ marginTop: 10 }}>
+                                <Text style={[styles.detailLabel, { marginBottom: 6 }]}>uploaded screenshot</Text>
+                                <View style={styles.receiptFrame}>
+                                  <Image
+                                    source={{ uri: repayment.screenshotUrl }}
+                                    style={styles.receiptImage}
+                                    resizeMode="contain"
+                                  />
+                                </View>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })
+                )}
+              </View>
             )}
           </View>
         )}
@@ -1969,5 +2334,119 @@ const styles = StyleSheet.create({
   },
   methodChipTextActive: {
     color: '#FFFFFF',
+  },
+  // Sub tab bar styles
+  subTabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    padding: 3,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  subTabItem: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 9,
+  },
+  subTabItemActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  subTabText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  subTabTextActive: {
+    color: '#0F172A',
+  },
+  // Metrics widget styles
+  metricsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 8,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  metricLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  metricValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  // Borrower and EMI details styling inside loan card
+  detailSectionHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#475569',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginTop: 10,
+  },
+  emiDetailsCard: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  holderDetailsBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  detailRowItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  detailRowLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  detailRowVal: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  detailRowSectionTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
 });

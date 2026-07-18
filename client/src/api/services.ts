@@ -255,6 +255,11 @@ export const AdminService = {
     const res = await apiClient.get('/admin/payments/pending');
     return res.data;
   },
+  
+  getRepayments: async (): Promise<{ success: boolean; data: { repayment: Repayment; loan: Loan; user: any }[] }> => {
+    const res = await apiClient.get('/admin/payments');
+    return res.data;
+  },
 
   verifyRepayment: async (id: string, status: 'completed' | 'failed', remarks?: string): Promise<{ success: boolean; data: any }> => {
     const res = await apiClient.patch(`/admin/payments/${id}/verify`, { status, remarks });

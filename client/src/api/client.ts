@@ -22,10 +22,15 @@ const apiClient = axios.create({
 // In-memory tokens for fast synchronous access in interceptors
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
+let onLogoutCallback: (() => void) | null = null;
 
 export const setInMemoryTokens = (access: string | null, refresh: string | null) => {
   accessToken = access;
   refreshToken = refresh;
+};
+
+export const setOnLogoutCallback = (callback: (() => void) | null) => {
+  onLogoutCallback = callback;
 };
 
 export const getInMemoryAccessToken = () => accessToken;
@@ -66,9 +71,10 @@ apiClient.interceptors.response.use(
 
     // Check if the error is 401 and not already retried
     if (error.response?.status === 401 && !originalRequest._retry) {
-      if (originalRequest.url === '/auth/refresh' || originalRequest.url === '/auth/login') {
+      if (originalRequest.url === '/auth/refresh-token' || originalRequest.url === '/auth/login') {
         // If refresh token request itself fails, clear session
         setInMemoryTokens(null, null);
+        if (onLogoutCallback) onLogoutCallback();
         return Promise.reject(error);
       }
 
@@ -95,7 +101,7 @@ apiClient.interceptors.response.use(
         }
 
         // Call the refresh endpoint
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
           refreshToken: storedRefreshToken,
         });
 
@@ -123,6 +129,7 @@ apiClient.interceptors.response.use(
         await tokenStorage.deleteItem('access_token');
         await tokenStorage.deleteItem('refresh_token');
         setInMemoryTokens(null, null);
+        if (onLogoutCallback) onLogoutCallback();
 
         return Promise.reject(refreshError);
       }

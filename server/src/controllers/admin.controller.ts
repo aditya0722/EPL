@@ -138,6 +138,15 @@ export const getPendingRepayments = async (_req: AuthenticatedRequest, res: Resp
   });
 };
 
+export const getAllRepayments = async (_req: AuthenticatedRequest, res: Response) => {
+  const result = await repaymentService.getAllRepayments();
+  res.status(200).json({
+    success: true,
+    message: "All repayments retrieved successfully",
+    data: result,
+  });
+};
+
 export const verifyRepayment = async (req: AuthenticatedRequest, res: Response) => {
   const adminId = req.user!.userId;
   const repaymentId = req.params.id as string;

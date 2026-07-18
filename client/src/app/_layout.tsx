@@ -66,12 +66,7 @@ function NavigationGuard() {
       <Stack.Screen
         name="loan/[id]"
         options={{
-          headerShown: true,
-          title: 'Application Timeline',
-          headerBackTitle: 'Back',
-          headerShadowVisible: false,
-          headerStyle: { backgroundColor: '#F9FAFB' },
-          headerTitleStyle: { fontWeight: '700', fontSize: 18, color: '#1F2937' },
+          headerShown: false,
         }}
       />
     </Stack>

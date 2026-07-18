@@ -516,7 +516,7 @@ export default function ProfileScreen() {
       errors.occupation = 'Occupation is required.';
     }
 
-    if (!monthlyIncome || isNaN(Number(monthlyIncome)) || Number(monthlyIncome) <= 0) {
+    if (monthlyIncome && monthlyIncome.trim().length > 0 && (isNaN(Number(monthlyIncome)) || Number(monthlyIncome) <= 0)) {
       errors.monthlyIncome = 'Monthly income must be a positive number.';
     }
 
@@ -540,7 +540,7 @@ export default function ProfileScreen() {
       errors.bankName = 'Bank name is required.';
     }
 
-    if (!emergencyContact || emergencyContact.trim().length < 10) {
+    if (emergencyContact && emergencyContact.trim().length > 0 && emergencyContact.trim().length < 10) {
       errors.emergencyContact = 'Emergency Contact must be a valid 10-digit number.';
     }
 
@@ -569,14 +569,19 @@ export default function ProfileScreen() {
         district: district.trim(),
         pincode: pincode.trim(),
         occupation: occupation.trim(),
-        monthlyIncome: Number(monthlyIncome),
         aadhaarNumber: aadhaarNumber.trim(),
         bankAccountNo: bankAccountNo.trim(),
         bankIfsc: bankIfsc.trim().toUpperCase(),
         bankName: bankName.trim(),
         upiId: upiId.trim(),
-        emergencyContact: emergencyContact.trim(),
       };
+
+      if (monthlyIncome && monthlyIncome.trim().length > 0) {
+        profileData.monthlyIncome = Number(monthlyIncome);
+      }
+      if (emergencyContact && emergencyContact.trim().length > 0) {
+        profileData.emergencyContact = emergencyContact.trim();
+      }
 
       if (panNumber && panNumber.trim().length > 0) {
         profileData.panNumber = panNumber.trim().toUpperCase();
@@ -738,7 +743,7 @@ export default function ProfileScreen() {
             />
 
             <InputField
-              label="Emergency Contact Number"
+              label="Emergency Contact Number (Optional)"
               placeholder="9999999999"
               keyboardType="phone-pad"
               value={emergencyContact}
@@ -805,7 +810,7 @@ export default function ProfileScreen() {
             />
 
             <InputField
-              label="Monthly Income"
+              label="Monthly Income (Optional)"
               placeholder="25000"
               keyboardType="numeric"
               value={monthlyIncome}
