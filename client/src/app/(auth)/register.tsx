@@ -1,0 +1,218 @@
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
+import { InputField } from '../../components/InputField';
+import { PrimaryButton } from '../../components/PrimaryButton';
+import { Colors, Brand, Spacing } from '../../constants/theme';
+import { Mail, Lock, User, Phone, AlertCircle } from 'lucide-react-native';
+
+export default function RegisterScreen() {
+  const [fullName, setFullName] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const { register } = useAuth();
+  const router = useRouter();
+  const theme = Colors.light;
+
+  const handleRegister = async () => {
+    // Validations
+    if (!fullName || !mobileNumber || !email || !password || !confirmPassword) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(mobileNumber)) {
+      setError('Invalid mobile number format (e.g. +919999999999)');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      await register({
+        email,
+        password,
+        fullName,
+        mobileNumber,
+      });
+      // AuthGuard redirects automatically
+    } catch (err: any) {
+      setError(err.friendlyMessage || 'Registration failed. Email may already be in use.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+        <View style={styles.header}>
+          <Text style={[styles.brand, { color: theme.primary }]}>EasyPezyCash</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Create Account</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Sign up to request quick and manual personal loans up to ₹50,000.
+          </Text>
+        </View>
+
+        <View style={styles.form}>
+          {error && (
+            <View style={[styles.errorBox, { backgroundColor: theme.error + '15' }]}>
+              <AlertCircle size={18} color={theme.error} style={{ marginRight: 8 }} />
+              <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+            </View>
+          )}
+
+          <InputField
+            label="Full Name"
+            placeholder="John Doe"
+            value={fullName}
+            onChangeText={setFullName}
+            icon={<User size={20} color={theme.textSecondary} />}
+          />
+
+          <InputField
+            label="Mobile Number"
+            placeholder="+91XXXXXXXXXX"
+            keyboardType="phone-pad"
+            value={mobileNumber}
+            onChangeText={setMobileNumber}
+            icon={<Phone size={20} color={theme.textSecondary} />}
+          />
+
+          <InputField
+            label="Email Address"
+            placeholder="john@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            icon={<Mail size={20} color={theme.textSecondary} />}
+          />
+
+          <InputField
+            label="Password"
+            placeholder="••••••••"
+            secureTextEntry
+            isPassword
+            value={password}
+            onChangeText={setPassword}
+            icon={<Lock size={20} color={theme.textSecondary} />}
+          />
+
+          <InputField
+            label="Confirm Password"
+            placeholder="••••••••"
+            secureTextEntry
+            isPassword
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            icon={<Lock size={20} color={theme.textSecondary} />}
+          />
+
+          <PrimaryButton
+            title="Register"
+            onPress={handleRegister}
+            loading={loading}
+            style={styles.submitBtn}
+          />
+
+          <View style={styles.loginContainer}>
+            <Text style={[styles.loginLabel, { color: theme.textSecondary }]}>
+              Already have an account?{' '}
+            </Text>
+            <Pressable onPress={() => router.push('/(auth)/login')}>
+              <Text style={[styles.loginLink, { color: theme.primary }]}>Sign In</Text>
+            </Pressable>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    padding: Spacing.five,
+    justifyContent: 'center',
+  },
+  header: {
+    marginBottom: Spacing.four,
+    alignItems: 'center',
+    marginTop: 40,
+  },
+  brand: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: Spacing.one,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '800',
+    marginBottom: Spacing.one,
+  },
+  subtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: Spacing.one,
+  },
+  form: {
+    width: '100%',
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: Brand.borderRadius.md,
+    marginBottom: Spacing.three,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+  },
+  submitBtn: {
+    marginTop: Spacing.three,
+  },
+  loginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: Spacing.four,
+    marginBottom: 40,
+  },
+  loginLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  loginLink: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});

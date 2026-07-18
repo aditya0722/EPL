@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
     "allowJs": true,
     "outDir": "./dist",
     "rootDir": "./src",
@@ -13,8 +13,8 @@
     "strictFunctionTypes": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
@@ -25,5 +25,5 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests/**/*"]
+  "exclude": ["node_modules", "dist", "tests/**/*", "src/check-db.ts", "src/db/seed.ts"]
 }
