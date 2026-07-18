@@ -1,0 +1,1 @@
+ALTER TABLE "loans" ADD COLUMN "processing_fee" numeric(12, 2) DEFAULT '0.00' NOT NULL;

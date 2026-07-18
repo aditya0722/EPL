@@ -1,0 +1,310 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Personal Loan Mobile App API",
+    "version": "1.0.0",
+    "description": "Production-ready backend API for the Personal Loan Mobile Application (PERN + Drizzle ORM)"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api/v1",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "User & Admin Registration",
+        "description": "Registers a new user or administrator in the system.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "example": "john@example.com" },
+                  "password": { "type": "string", "example": "password123" },
+                  "fullName": { "type": "string", "example": "John Doe" },
+                  "mobileNumber": { "type": "string", "example": "9988776655" },
+                  "role": { "type": "string", "enum": ["user", "admin"], "example": "user" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registration successful",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Registration successful",
+                  "data": {
+                    "id": "abc-123-uuid",
+                    "email": "john@example.com",
+                    "role": "user",
+                    "fullName": "John Doe",
+                    "mobileNumber": "9988776655",
+                    "kycStatus": "pending",
+                    "emailVerified": false,
+                    "createdAt": "2026-07-14T09:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed / Email already exists",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "Email already in use",
+                  "errors": []
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "User & Admin Login",
+        "description": "Authenticates user and returns access and refresh JWT tokens.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "example": "john@example.com" },
+                  "password": { "type": "string", "example": "password123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Login successful",
+                  "data": {
+                    "user": {
+                      "id": "abc-123-uuid",
+                      "email": "john@example.com",
+                      "role": "user",
+                      "fullName": "John Doe",
+                      "kycStatus": "pending"
+                    },
+                    "accessToken": "ey...",
+                    "refreshToken": "ey..."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "Invalid email or password",
+                  "errors": []
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/profile": {
+      "get": {
+        "summary": "Retrieve User Profile Details",
+        "description": "Fetches profile info and completion percentage.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Profile details",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Profile retrieved successfully",
+                  "data": {
+                    "id": "abc-123-uuid",
+                    "email": "john@example.com",
+                    "role": "user",
+                    "fullName": "John Doe",
+                    "kycStatus": "pending",
+                    "profileCompletionPercentage": 16
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update Profile Details",
+        "description": "Updates profile details like DOB, PAN, bank account details. KYC status is updated to 'submitted' if verified documents are needed.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fullName": { "type": "string", "example": "John Doe" },
+                  "mobileNumber": { "type": "string", "example": "+919988776655" },
+                  "dob": { "type": "string", "example": "1990-01-01" },
+                  "gender": { "type": "string", "enum": ["male", "female", "other"], "example": "male" },
+                  "panNumber": { "type": "string", "example": "ABCDE1234F" },
+                  "aadhaarNumber": { "type": "string", "example": "123456789012" },
+                  "address": { "type": "string", "example": "Flat 101, Residency, Mumbai" },
+                  "occupation": { "type": "string", "example": "Salaried Professional" },
+                  "monthlyIncome": { "type": "number", "example": 45000 },
+                  "bankAccountNo": { "type": "string", "example": "9182736455" },
+                  "bankIfsc": { "type": "string", "example": "SBIN0001234" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Profile updated successfully",
+                  "data": {
+                    "fullName": "John Doe",
+                    "kycStatus": "submitted",
+                    "profileCompletionPercentage": 92
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/loans/apply": {
+      "post": {
+        "summary": "Apply for a Personal Loan",
+        "description": "Applies for a personal loan (₹5,000 to ₹50,000). KYC status must not be 'pending' or 'rejected'.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["loanAmount", "loanPurpose", "employmentType", "monthlyIncome", "loanDuration"],
+                "properties": {
+                  "loanAmount": { "type": "number", "example": 25000 },
+                  "loanPurpose": { "type": "string", "example": "Medical emergency" },
+                  "employmentType": { "type": "string", "example": "Salaried" },
+                  "monthlyIncome": { "type": "number", "example": 45000 },
+                  "existingEmi": { "type": "number", "example": 0 },
+                  "loanDuration": { "type": "number", "example": 12 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Loan application submitted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Loan application submitted successfully",
+                  "data": {
+                    "id": "loan-uuid-123",
+                    "userId": "user-uuid",
+                    "loanAmount": "25000.00",
+                    "status": "pending",
+                    "applicationDate": "2026-07-14T09:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid loan limits or incomplete KYC",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "Loan amount must be between ₹5,000 and ₹50,000",
+                  "errors": []
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/dashboard/stats": {
+      "get": {
+        "summary": "Retrieve Administrative Stats",
+        "description": "Fetches aggregation metrics for the admin dashboard (today's application, pending kyc, monthly volume, active totals, logs).",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Dashboard statistics",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Admin dashboard stats retrieved successfully",
+                  "data": {
+                    "totalCustomers": 12,
+                    "todaysApplications": 3,
+                    "pendingVerifications": 4,
+                    "outstandingAmount": 45000,
+                    "totalRepayments": 10000,
+                    "loansStats": {
+                      "pendingLoans": 5,
+                      "approvedLoans": 2,
+                      "rejectedLoans": 1,
+                      "disbursedLoans": 4,
+                      "disbursedAmount": 55000
+                    },
+                    "monthlyDisbursals": [{ "month": "2026-07", "amount": 55000 }],
+                    "monthlyRepayments": [{ "month": "2026-07", "amount": 10000 }],
+                    "recentActivities": []
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
