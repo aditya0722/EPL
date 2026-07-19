@@ -41,11 +41,11 @@ export class LoanService {
       throw new AppError("User not found", 404);
     }
 
-    // Verify profile is 100% complete
+    // Verify profile is at least 80% complete (bypass if KYC is already verified)
     const userService = new UserService();
     const profile = await userService.getProfile(userId);
-    if (profile.profileCompletionPercentage < 100) {
-      throw new AppError("Please complete your profile to 100% before applying for a loan", 400);
+    if (user.kycStatus !== "verified" && profile.profileCompletionPercentage < 80) {
+      throw new AppError("Please complete your profile to at least 80% before applying for a loan", 400);
     }
 
     const userLoans = await this.loanRepo.findByUserId(userId);
@@ -58,7 +58,7 @@ export class LoanService {
     }
 
     const repaymentType = data.repaymentType || "emi";
-    const interestRate = repaymentType === "emi" ? 40 : 8; // EMI interest is 40%
+    const interestRate = repaymentType === "emi" ? 40 : (8 * data.loanDuration); // EMI interest is 40% flat, Normal is 8% per month
     const interestAmount = Math.round(data.loanAmount * (interestRate / 100));
     const totalPayable = data.loanAmount + interestAmount;
 

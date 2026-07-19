@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Dimensions, RefreshControl, TextInput } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Dimensions, RefreshControl, TextInput, Modal, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
@@ -392,11 +392,19 @@ export default function ProfileScreen() {
   // React state hooks for Profile fields
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [mobileNumber, setMobileNumber] = useState(user?.mobileNumber || '');
+
+  // DOB parsing and states
+  const dobParts = user?.dob ? user.dob.split('T')[0].split('-') : [];
+  const [selectedDay, setSelectedDay] = useState(dobParts.length === 3 ? String(Number(dobParts[2])) : '');
+  const [selectedMonth, setSelectedMonth] = useState(dobParts.length === 3 ? String(Number(dobParts[1])) : '');
+  const [selectedYear, setSelectedYear] = useState(dobParts.length === 3 ? dobParts[0] : '');
   const [dob, setDob] = useState(user?.dob ? new Date(user.dob).toISOString().split('T')[0] : '');
+
   const [gender, setGender] = useState(user?.gender || '');
   const [panNumber, setPanNumber] = useState(user?.panNumber || '');
   const [aadhaarNumber, setAadhaarNumber] = useState(user?.aadhaarNumber || '');
   const [address, setAddress] = useState(user?.address || '');
+  const [country, setCountry] = useState('India'); // Industry-standard Country field
   const [stateVal, setStateVal] = useState(user?.state || '');
   const [district, setDistrict] = useState(user?.district || '');
   const [pincode, setPincode] = useState(user?.pincode || '');
@@ -407,6 +415,231 @@ export default function ProfileScreen() {
   const [bankName, setBankName] = useState(user?.bankName || '');
   const [upiId, setUpiId] = useState(user?.upiId || '');
   const [emergencyContact, setEmergencyContact] = useState(user?.emergencyContact || '');
+
+  // Custom List Picker Modal States
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [modalType, setModalType] = useState<'day' | 'month' | 'year' | 'state' | 'country'>('day');
+
+  // DOB helper lists
+  const days = Array.from({ length: 31 }, (_, i) => String(i + 1));
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const years = Array.from({ length: 70 }, (_, i) => String(new Date().getFullYear() - 18 - i));
+  const countries = ['India'];
+  const states = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 
+    'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 
+    'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 
+    'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 
+    'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi', 'Other'
+  ];
+
+  // Sync combined Date of Birth state when parts are chosen
+  useEffect(() => {
+    if (selectedDay && selectedMonth && selectedYear) {
+      setDob(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`);
+      setFieldErrors((prev) => ({ ...prev, dob: '' }));
+    }
+  }, [selectedDay, selectedMonth, selectedYear]);
+
+  const getModalOptions = () => {
+    switch (modalType) {
+      case 'day': return days;
+      case 'month': return months.map((m, idx) => ({ label: m, value: String(idx + 1) }));
+      case 'year': return years;
+      case 'country': return countries;
+      case 'state': return states;
+      default: return [];
+    }
+  };
+
+  const renderListPickerModal = () => {
+    const options = getModalOptions();
+    const modalTitle = {
+      day: 'Select Day of Birth',
+      month: 'Select Month of Birth',
+      year: 'Select Year of Birth',
+      country: 'Select Country',
+      state: 'Select State'
+    }[modalType];
+
+    return (
+      <Modal
+        visible={pickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitleText}>{modalTitle}</Text>
+              <Pressable onPress={() => setPickerVisible(false)} style={styles.modalCloseBtn}>
+                <X size={20} color="#64748B" />
+              </Pressable>
+            </View>
+
+            <FlatList
+              data={options}
+              keyExtractor={(item) => (typeof item === 'object' ? item.value : item)}
+              renderItem={({ item }) => {
+                const label = typeof item === 'object' ? item.label : item;
+                const value = typeof item === 'object' ? item.value : item;
+                
+                let isSelected = false;
+                if (modalType === 'day') isSelected = selectedDay === value;
+                else if (modalType === 'month') isSelected = selectedMonth === value;
+                else if (modalType === 'year') isSelected = selectedYear === value;
+                else if (modalType === 'country') isSelected = country === value;
+                else if (modalType === 'state') isSelected = stateVal === value;
+
+                return (
+                  <Pressable
+                    style={[
+                      styles.modalOptionRow,
+                      isSelected && { backgroundColor: theme.primary + '15' }
+                    ]}
+                    onPress={() => {
+                      if (modalType === 'day') setSelectedDay(value);
+                      else if (modalType === 'month') setSelectedMonth(value);
+                      else if (modalType === 'year') setSelectedYear(value);
+                      else if (modalType === 'country') setCountry(value);
+                      else if (modalType === 'state') {
+                        setStateVal(value);
+                        setFieldErrors((prev) => ({ ...prev, stateVal: '' }));
+                      }
+                      setPickerVisible(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.modalOptionText,
+                        { color: isSelected ? theme.primary : '#334155', fontWeight: isSelected ? '700' : '500' }
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                    {isSelected && <CheckCircle2 size={16} color={theme.primary} />}
+                  </Pressable>
+                );
+              }}
+              style={{ maxHeight: 300 }}
+              contentContainerStyle={{ paddingVertical: 8 }}
+            />
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Location detection and geocoding helper functions
+  const [detectingLocation, setDetectingLocation] = useState(false);
+
+  const fetchAddressFromPincode = async (pin: string) => {
+    if (!/^\d{6}$/.test(pin)) return;
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+      const data = await res.json();
+      if (data && data[0]?.Status === 'Success') {
+        const postOffice = data[0].PostOffice[0];
+        if (postOffice) {
+          if (postOffice.District) setDistrict(postOffice.District);
+          if (postOffice.State) {
+            setStateVal(postOffice.State);
+          }
+          setFieldErrors((prev) => ({ ...prev, district: '', stateVal: '', pincode: '' }));
+        }
+      }
+    } catch (err) {
+      console.log('Error fetching address from pincode', err);
+    }
+  };
+
+  const handlePincodeChange = (text: string) => {
+    const cleanPin = text.replace(/[^0-9]/g, '');
+    setPincode(cleanPin);
+    setFieldErrors((prev) => ({ ...prev, pincode: '' }));
+    if (cleanPin.length === 6) {
+      fetchAddressFromPincode(cleanPin);
+    }
+  };
+
+  const handleDetectLocation = () => {
+    if (Platform.OS === 'web' && !navigator.geolocation) {
+      Alert.alert('Not Supported', 'Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setDetectingLocation(true);
+    const geo = Platform.OS === 'web' ? navigator.geolocation : (global as any).navigator?.geolocation;
+
+    if (!geo) {
+      fetchIpLocation();
+      return;
+    }
+
+    geo.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`, {
+            headers: {
+              'User-Agent': 'EasyPezyCashApp/1.0'
+            }
+          });
+          const data = await response.json();
+          if (data && data.address) {
+            const addr = data.address;
+            const stateName = addr.state || '';
+            const cityName = addr.city || addr.town || addr.suburb || addr.village || addr.county || '';
+            const pinCode = addr.postcode || '';
+            const displayAddr = data.display_name || '';
+
+            if (stateName) setStateVal(stateName);
+            if (cityName) setDistrict(cityName);
+            if (pinCode) setPincode(pinCode);
+            if (displayAddr) setAddress(displayAddr);
+
+            setFieldErrors((prev) => ({ ...prev, address: '', district: '', stateVal: '', pincode: '' }));
+            Alert.alert('Success', 'Address and Pincode have been automatically detected!');
+          } else {
+            Alert.alert('Error', 'Could not resolve address details for this location.');
+          }
+        } catch (err) {
+          Alert.alert('Error', 'Failed to fetch location details.');
+        } finally {
+          setDetectingLocation(false);
+        }
+      },
+      (error) => {
+        fetchIpLocation();
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+    );
+  };
+
+  const fetchIpLocation = async () => {
+    try {
+      const res = await fetch('https://ipapi.co/json/');
+      const data = await res.json();
+      if (data) {
+        if (data.region) setStateVal(data.region);
+        if (data.city) setDistrict(data.city);
+        if (data.postal) setPincode(data.postal);
+        setFieldErrors((prev) => ({ ...prev, district: '', stateVal: '', pincode: '' }));
+        Alert.alert('Location Auto-filled', 'State and District have been filled based on your IP address.');
+      }
+    } catch (err) {
+      console.log('IP geocoding failed', err);
+      Alert.alert('Error', 'Could not detect location. Please enter details manually.');
+    } finally {
+      setDetectingLocation(false);
+    }
+  };
+
+  // Automatically trigger location detection on mount
+  useEffect(() => {
+    handleDetectLocation();
+  }, []);
 
   // QR Code Document URL state
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
@@ -629,6 +862,7 @@ export default function ProfileScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.container, { backgroundColor: '#F4F6F9' }]}
     >
+      {renderListPickerModal()}
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
         
         {/* HERO SECTION */}
@@ -702,23 +936,82 @@ export default function ProfileScreen() {
               error={fieldErrors.mobileNumber}
             />
 
-            <InputField
-              label="Date of Birth (YYYY-MM-DD)"
-              placeholder="1995-08-25"
-              value={dob}
-              onChangeText={(text) => { setDob(text); setFieldErrors({...fieldErrors, dob: ''}); }}
-              icon={<Calendar size={20} color={theme.textSecondary} />}
-              error={fieldErrors.dob}
-            />
+            {/* Date of Birth Picker */}
+            <View style={styles.pickerFieldContainer}>
+              <Text style={styles.pickerFieldLabel}>Date of Birth</Text>
+              <View style={styles.dobRow}>
+                <Pressable
+                  style={[styles.dobSelectBox, fieldErrors.dob ? { borderColor: '#EF4444' } : {}]}
+                  onPress={() => {
+                    setModalType('day');
+                    setPickerVisible(true);
+                  }}
+                >
+                  <Text style={styles.dobSelectText}>{selectedDay || 'Day'}</Text>
+                  <ChevronDown size={16} color={theme.textSecondary} />
+                </Pressable>
 
-            <InputField
-              label="Gender (male / female / other)"
-              placeholder="male"
-              value={gender}
-              onChangeText={(text) => { setGender(text.toLowerCase()); setFieldErrors({...fieldErrors, gender: ''}); }}
-              icon={<User size={20} color={theme.textSecondary} />}
-              error={fieldErrors.gender}
-            />
+                <Pressable
+                  style={[styles.dobSelectBox, fieldErrors.dob ? { borderColor: '#EF4444' } : {}]}
+                  onPress={() => {
+                    setModalType('month');
+                    setPickerVisible(true);
+                  }}
+                >
+                  <Text style={styles.dobSelectText}>
+                    {selectedMonth ? months[Number(selectedMonth) - 1] : 'Month'}
+                  </Text>
+                  <ChevronDown size={16} color={theme.textSecondary} />
+                </Pressable>
+
+                <Pressable
+                  style={[styles.dobSelectBox, fieldErrors.dob ? { borderColor: '#EF4444' } : {}]}
+                  onPress={() => {
+                    setModalType('year');
+                    setPickerVisible(true);
+                  }}
+                >
+                  <Text style={styles.dobSelectText}>{selectedYear || 'Year'}</Text>
+                  <ChevronDown size={16} color={theme.textSecondary} />
+                </Pressable>
+              </View>
+              {fieldErrors.dob ? (
+                <Text style={styles.errorTextSmall}>{fieldErrors.dob}</Text>
+              ) : null}
+            </View>
+
+            {/* Gender Segmented Selection */}
+            <View style={styles.pickerFieldContainer}>
+              <Text style={styles.pickerFieldLabel}>Gender</Text>
+              <View style={styles.genderRow}>
+                {['male', 'female', 'other'].map((g) => (
+                  <Pressable
+                    key={g}
+                    style={[
+                      styles.genderBtnItem,
+                      gender === g && { backgroundColor: theme.primary, borderColor: theme.primary },
+                      fieldErrors.gender ? { borderColor: '#EF4444' } : {}
+                    ]}
+                    onPress={() => {
+                      setGender(g);
+                      setFieldErrors({ ...fieldErrors, gender: '' });
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.genderBtnTextItem,
+                        { color: gender === g ? '#FFFFFF' : theme.text }
+                      ]}
+                    >
+                      {g.toUpperCase()}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {fieldErrors.gender ? (
+                <Text style={styles.errorTextSmall}>{fieldErrors.gender}</Text>
+              ) : null}
+            </View>
 
             <InputField
               label="Aadhaar Number (12 digits)"
@@ -754,7 +1047,23 @@ export default function ProfileScreen() {
           </View>
 
           {/* SECTION 2: ADDRESS DETAILS */}
-          <Text style={styles.sectionTitle}>Address Details</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 8 }}>
+            <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Address Details</Text>
+            <Pressable 
+              style={[styles.detectLocationBtn, detectingLocation && { opacity: 0.7 }]}
+              onPress={handleDetectLocation}
+              disabled={detectingLocation}
+            >
+              {detectingLocation ? (
+                <ActivityIndicator size="small" color={theme.primary} />
+              ) : (
+                <>
+                  <MapPin size={14} color={theme.primary} style={{ marginRight: 4 }} />
+                  <Text style={[styles.detectLocationText, { color: theme.primary }]}>Detect Location</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
           <View style={styles.glassCard}>
             <InputField
               label="Permanent Address"
@@ -767,6 +1076,24 @@ export default function ProfileScreen() {
               error={fieldErrors.address}
             />
 
+            {/* Country Selector */}
+            <View style={styles.pickerFieldContainer}>
+              <Text style={styles.pickerFieldLabel}>Country</Text>
+              <Pressable
+                style={styles.pickerSelectBox}
+                onPress={() => {
+                  setModalType('country');
+                  setPickerVisible(true);
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 16, marginRight: 8 }}>🇮🇳</Text>
+                  <Text style={styles.pickerSelectText}>{country}</Text>
+                </View>
+                <ChevronDown size={18} color={theme.textSecondary} />
+              </Pressable>
+            </View>
+
             <InputField
               label="District"
               placeholder="Pune / Mumbai"
@@ -776,14 +1103,23 @@ export default function ProfileScreen() {
               error={fieldErrors.district}
             />
 
-            <InputField
-              label="State"
-              placeholder="Maharashtra"
-              value={stateVal}
-              onChangeText={(text) => { setStateVal(text); setFieldErrors({...fieldErrors, stateVal: ''}); }}
-              icon={<MapIcon size={20} color={theme.textSecondary} />}
-              error={fieldErrors.stateVal}
-            />
+            {/* State Selector */}
+            <View style={styles.pickerFieldContainer}>
+              <Text style={styles.pickerFieldLabel}>State</Text>
+              <Pressable
+                style={[styles.pickerSelectBox, fieldErrors.stateVal ? { borderColor: '#EF4444' } : {}]}
+                onPress={() => {
+                  setModalType('state');
+                  setPickerVisible(true);
+                }}
+              >
+                <Text style={styles.pickerSelectText}>{stateVal || 'Select State'}</Text>
+                <ChevronDown size={18} color={theme.textSecondary} />
+              </Pressable>
+              {fieldErrors.stateVal ? (
+                <Text style={styles.errorTextSmall}>{fieldErrors.stateVal}</Text>
+              ) : null}
+            </View>
 
             <InputField
               label="Pincode (6 digits)"
@@ -791,7 +1127,7 @@ export default function ProfileScreen() {
               keyboardType="numeric"
               maxLength={6}
               value={pincode}
-              onChangeText={(text) => { setPincode(text); setFieldErrors({...fieldErrors, pincode: ''}); }}
+              onChangeText={handlePincodeChange}
               icon={<MapPin size={20} color={theme.textSecondary} />}
               error={fieldErrors.pincode}
             />
@@ -1514,5 +1850,136 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F1F5F9',
     marginVertical: 12,
+  },
+  pickerFieldContainer: {
+    marginBottom: 16,
+  },
+  pickerFieldLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  dobRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dobSelectBox: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+  },
+  dobSelectText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  genderBtnItem: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  genderBtnTextItem: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pickerSelectBox: {
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+  },
+  pickerSelectText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxHeight: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalTitleText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalOptionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginVertical: 2,
+  },
+  modalOptionText: {
+    fontSize: 14,
+  },
+  errorTextSmall: {
+    color: '#EF4444',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  detectLocationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#1A298015',
+    borderWidth: 1,
+    borderColor: '#1A298030',
+  },
+  detectLocationText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

@@ -47,9 +47,7 @@ export const InputField: React.FC<InputFieldProps> = ({
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.label, { color: error ? theme.error : theme.textSecondary }]}>
-        {label}
-      </Text>
+      <Text style={[styles.label, { color: error ? theme.error : theme.textSecondary }]}>{label}</Text>
       
       <View
         style={[

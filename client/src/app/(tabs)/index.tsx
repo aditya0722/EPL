@@ -591,7 +591,7 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            {data.profileCompletion < 100 ? (
+            {user?.kycStatus !== 'verified' && data.profileCompletion < 80 ? (
               <View style={styles.incompleteProfileContainer}>
                 <View style={styles.progressRow}>
                   <Text style={styles.progressText}>Profile Completion: {data.profileCompletion}%</Text>
@@ -600,7 +600,7 @@ export default function HomeScreen() {
                   <View style={[styles.progressBarFill, { width: `${data.profileCompletion}%` }]} />
                 </View>
                 <Text style={styles.incompleteWarningText}>
-                  ⚠️ Please complete your profile to 100% before applying for a loan.
+                  ⚠️ Please complete your profile to at least 80% before applying for a loan.
                 </Text>
                 <Pressable
                   style={[styles.createAppBtn, { backgroundColor: '#4B5563', marginTop: 12 }]}

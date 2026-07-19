@@ -94,11 +94,9 @@ export class UserService {
       "district",
       "pincode",
       "occupation",
-      "monthlyIncome",
       "bankAccountNo",
       "bankIfsc",
       "bankName",
-      "emergencyContact",
       "aadhaarNumber"
     ];
 

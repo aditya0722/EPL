@@ -9,7 +9,13 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ): void => {
-  logger.error("Error occurred: %o", err);
+  const statusCode = err.statusCode || (err instanceof ZodError || err.name === "ZodError" ? 400 : 500);
+
+  if (statusCode >= 500) {
+    logger.error("Internal Server Error occurred: %o", err);
+  } else {
+    logger.warn(`Operational Client Error (${statusCode}) on ${req.method} ${req.originalUrl}: ${err.message || "Validation failed"}`);
+  }
 
   if (err instanceof ZodError || err.name === "ZodError") {
     const errors = (err.errors || []).map((e: any) => ({

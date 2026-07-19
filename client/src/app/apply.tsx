@@ -21,7 +21,7 @@ export default function ApplyLoanScreen() {
   const [sliderWidth, setSliderWidth] = useState(0);
 
   // Interest Calculations
-  const interestRate = scheme === 'emi' ? 0.40 : 0.08;
+  const interestRate = scheme === 'emi' ? 0.40 : (0.08 * duration); // EMI is 40% flat, Normal is 8% flat per month
   const interestAmount = Math.round(amount * interestRate);
   const totalRepayable = amount + interestAmount;
   const monthlyEmi = Math.round(totalRepayable / duration);
@@ -34,15 +34,28 @@ export default function ApplyLoanScreen() {
   };
   const processingFee = getProcessingFee(amount);
 
+  const dragStartAmount = React.useRef(amount);
+  const sliderWidthRef = React.useRef(sliderWidth);
+  const amountRef = React.useRef(amount);
+
+  React.useEffect(() => {
+    sliderWidthRef.current = sliderWidth;
+  }, [sliderWidth]);
+
+  React.useEffect(() => {
+    amountRef.current = amount;
+  }, [amount]);
+
   const handleSliderTouch = (evt: any) => {
-    if (sliderWidth === 0) return;
+    if (sliderWidthRef.current === 0) return;
     const touchX = evt.nativeEvent.locationX;
-    const pct = Math.max(0, Math.min(1, touchX / sliderWidth));
+    const pct = Math.max(0, Math.min(1, touchX / sliderWidthRef.current));
     const minVal = 5000;
     const maxVal = 10000;
     const rawValue = minVal + pct * (maxVal - minVal);
-    // Round to nearest 1000
-    setAmount(Math.round(rawValue / 1000) * 1000);
+    const rounded = Math.round(rawValue / 1000) * 1000;
+    setAmount(rounded);
+    dragStartAmount.current = rounded;
   };
 
   const panResponder = React.useRef(
@@ -50,7 +63,20 @@ export default function ApplyLoanScreen() {
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: handleSliderTouch,
-      onPanResponderMove: handleSliderTouch,
+      onPanResponderMove: (evt, gestureState) => {
+        if (sliderWidthRef.current === 0) return;
+        const minVal = 5000;
+        const maxVal = 10000;
+        const range = maxVal - minVal;
+        
+        const pctChange = gestureState.dx / sliderWidthRef.current;
+        const amountChange = pctChange * range;
+        
+        const newRawVal = dragStartAmount.current + amountChange;
+        const clampedVal = Math.max(minVal, Math.min(maxVal, newRawVal));
+        
+        setAmount(Math.round(clampedVal / 1000) * 1000);
+      },
     })
   ).current;
 
@@ -83,9 +109,9 @@ export default function ApplyLoanScreen() {
   });
 
   const handleSubmit = () => {
-    // Validate profile is complete again
-    if ((user?.profileCompletionPercentage || 0) < 100) {
-      Alert.alert('Incomplete Profile', 'You must complete your profile to 100% before applying.');
+    // Validate profile is complete again (bypass if KYC is already verified)
+    if (user?.kycStatus !== 'verified' && (user?.profileCompletionPercentage || 0) < 80) {
+      Alert.alert('Incomplete Profile', 'You must complete your profile to at least 80% before applying.');
       return;
     }
     applyMutation.mutate();
@@ -213,8 +239,38 @@ export default function ApplyLoanScreen() {
 
           <Text style={styles.sectionTitle}>Select Loan Amount</Text>
           <Text style={styles.sectionSubtitle}>
-            Move the slider to select your loan amount
+            Choose your loan amount by tapping a card below or moving the slider
           </Text>
+
+          {/* Selectable Amount Pills */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 12, marginBottom: 16 }}>
+            {[5000, 6000, 7000, 8000, 9000, 10000].map((amt) => {
+              const isSelected = amount === amt;
+              return (
+                <Pressable
+                  key={amt}
+                  onPress={() => {
+                    setAmount(amt);
+                    dragStartAmount.current = amt;
+                  }}
+                  style={{
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                    borderRadius: 10,
+                    borderWidth: 1.5,
+                    borderColor: isSelected ? '#1A2980' : '#E5E7EB',
+                    backgroundColor: isSelected ? '#1A298010' : '#FFFFFF',
+                    minWidth: 80,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: isSelected ? '#1A2980' : '#666', fontWeight: '700', fontSize: 13 }}>
+                    ₹{amt.toLocaleString('en-IN')}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
           <View style={styles.amountDisplay}>
             <Text style={styles.currencySymbol}>₹</Text>
