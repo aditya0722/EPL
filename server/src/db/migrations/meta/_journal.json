@@ -22,6 +22,13 @@
       "when": 1784258062010,
       "tag": "0002_stale_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784607831262,
+      "tag": "0003_petite_reaper",
+      "breakpoints": true
     }
   ]
 }
