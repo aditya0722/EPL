@@ -59,6 +59,12 @@ export class DocumentService {
 
     if (uploadedMandatory && (user.kycStatus === "pending" || user.kycStatus === "rejected")) {
       await this.userRepo.update(userId, { kycStatus: "submitted" });
+      await this.notificationService.notifyAdmins(
+        "KYC Submission Received 🛡️",
+        `${user.fullName || user.email} submitted all mandatory KYC documents for review.`,
+        "document_required",
+        { userId }
+      );
     }
 
     return doc;

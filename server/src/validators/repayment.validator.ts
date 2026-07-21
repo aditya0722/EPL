@@ -8,6 +8,6 @@ export const recordRepaymentSchema = {
     paymentMethod: z.enum(["upi", "bank_transfer", "cash", "other"]),
     transactionRef: z.string().min(5, { message: "Transaction reference is required (min 5 chars)" }),
     remarks: z.string().optional(),
-    screenshotUrl: z.string().optional(),
+    screenshotUrl: z.string().min(1, { message: "Payment screenshot is required" }),
   }),
 };

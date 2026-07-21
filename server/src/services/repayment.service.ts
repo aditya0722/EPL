@@ -88,6 +88,13 @@ export class RepaymentService {
       "admin_message"
     );
 
+    await this.notificationService.notifyAdmins(
+      "Payment Awaiting Verification 💳",
+      `${loanDetails.user.fullName || loanDetails.user.email} submitted a repayment of ₹${data.amount} with receipt for review.`,
+      "payment_recorded",
+      { repaymentId: repayment.id, loanId: data.loanId }
+    );
+
     const totalRepaid = await this.repaymentRepo.getSumByLoanId(data.loanId);
     const totalPayable = Number(loanDetails.loan.totalPayable);
 

@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware.js";
 import { UserService } from "../services/user.service.js";
+import { AppError } from "../utils/app-error.js";
 import { LoanService } from "../services/loan.service.js";
 import { DocumentService } from "../services/document.service.js";
 import { NotificationService } from "../services/notification.service.js";
@@ -74,5 +75,19 @@ export const getDashboard = async (req: AuthenticatedRequest, res: Response) => 
       pendingDocuments,
       notifications,
     },
+  });
+};
+
+export const updatePushToken = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const { pushToken } = req.body;
+  if (!pushToken || typeof pushToken !== "string") {
+    throw new AppError("pushToken is required", 400);
+  }
+  const updatedUser = await userService.updateProfile(userId, { pushToken });
+  res.status(200).json({
+    success: true,
+    message: "Push token updated successfully",
+    data: { pushToken: updatedUser.pushToken },
   });
 };

@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import apiClient, { API_BASE_URL, getInMemoryAccessToken } from './client';
 
 // TYPES
@@ -148,6 +149,11 @@ export const UserService = {
     const res = await apiClient.get('/users/dashboard');
     return res.data;
   },
+
+  updatePushToken: async (pushToken: string): Promise<{ success: boolean; data: any }> => {
+    const res = await apiClient.post('/users/push-token', { pushToken });
+    return res.data;
+  },
 };
 
 export const RepaymentService = {
@@ -155,7 +161,8 @@ export const RepaymentService = {
     loanId: string;
     amount: number;
     paymentMethod: 'upi' | 'bank_transfer' | 'cash' | 'other';
-    transactionRef?: string;
+    transactionRef: string;
+    screenshotUrl: string;
     remarks?: string;
   }): Promise<{ success: boolean; data: any }> => {
     const res = await apiClient.post('/repayments', data);
@@ -164,15 +171,43 @@ export const RepaymentService = {
 };
 
 export const DocumentService = {
-  uploadQrCode: async (fileUri: string, fileName: string, fileType: string): Promise<{ success: boolean; data: UserDocument }> => {
+  uploadQrCode: async (fileUri: string, fileName?: string, fileType?: string): Promise<{ success: boolean; data: UserDocument }> => {
     const formData = new FormData();
-    // In React Native, FormData requires an object with uri, name, and type properties for file uploads
-    formData.append('file', {
-      uri: fileUri,
-      name: fileName,
-      type: fileType || 'image/jpeg',
-    } as any);
-    formData.append('documentType', 'other'); // Store QR code as documentType 'other'
+
+    let mimeType = fileType;
+    if (!mimeType || mimeType === 'unknown' || !mimeType.includes('/')) {
+      if (fileUri.endsWith('.png')) mimeType = 'image/png';
+      else if (fileUri.endsWith('.webp')) mimeType = 'image/webp';
+      else mimeType = 'image/jpeg';
+    }
+
+    const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+    const name = fileName && fileName !== 'unknown' ? fileName : `receipt_${Date.now()}.${ext}`;
+
+    if (Platform.OS === 'web') {
+      try {
+        const fetchRes = await fetch(fileUri);
+        const blob = await fetchRes.blob();
+        const fileObj = new File([blob], name, { type: mimeType });
+        (fileObj as any).uri = fileUri;
+        formData.append('file', fileObj);
+      } catch {
+        formData.append('file', {
+          uri: fileUri,
+          name,
+          type: mimeType,
+        } as any);
+      }
+    } else {
+      // React Native Mobile (iOS/Android)
+      formData.append('file', {
+        uri: Platform.OS === 'android' ? fileUri : fileUri.replace('file://', ''),
+        name,
+        type: mimeType,
+      } as any);
+    }
+
+    formData.append('documentType', 'other');
 
     const token = getInMemoryAccessToken();
     const response = await fetch(`${API_BASE_URL}/documents/upload`, {
@@ -246,6 +281,7 @@ export const AdminService = {
     paymentMethod: string;
     transactionRef: string;
     remarks?: string;
+    screenshotUrl?: string;
   }): Promise<{ success: boolean; data: any }> => {
     const res = await apiClient.post('/admin/payments', data);
     return res.data;

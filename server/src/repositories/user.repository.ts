@@ -120,4 +120,11 @@ export class UserRepository {
       .limit(options.limit)
       .offset(options.offset);
   }
+
+  async findAdmins() {
+    return this.db
+      .select()
+      .from(users)
+      .where(and(eq(users.role, "admin"), isNull(users.deletedAt)));
+  }
 }

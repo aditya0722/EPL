@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { InputField } from '../../components/InputField';
@@ -68,7 +68,11 @@ export default function RegisterScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={[styles.brand, { color: theme.primary }]}>EasyPezyCash</Text>
+          <Image
+            source={require('../../../assets/images/logo.jpg')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={[styles.title, { color: theme.text }]}>Create Account</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             Sign up to request quick and manual personal loans up to ₹50,000.
@@ -165,9 +169,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 40,
   },
-  brand: {
-    fontSize: 20,
-    fontWeight: '800',
+  logoImage: {
+    width: 200,
+    height: 120,
     marginBottom: Spacing.one,
   },
   title: {

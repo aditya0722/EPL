@@ -33,6 +33,7 @@ export const users = pgTable("users", {
   kycStatus: kycStatusEnum("kyc_status").default("pending").notNull(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   refreshToken: text("refresh_token"),
+  pushToken: text("push_token"),
   
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 // Keep the splash screen visible while bootstrapping
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -22,6 +23,9 @@ function NavigationGuard() {
   const { isAuthenticated, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  // Initialize cross-platform push notifications
+  usePushNotifications(isAuthenticated);
 
   useEffect(() => {
     if (isLoading) return;

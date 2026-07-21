@@ -513,53 +513,7 @@ function UserLoansHistory() {
 
   const handleMakeRepayment = async () => {
     if (!currentLoan) return;
-    const duration = currentLoan?.loanDuration || 3;
-    const installmentAmount = Math.round(totalPayable / duration) || 1;
-    const amountToPay = currentLoan?.repaymentType === 'emi' ? Math.min(installmentAmount, outstandingAmount) : outstandingAmount;
-
-    if (amountToPay <= 0) {
-      Alert.alert('Info', 'Your loan has already been fully repaid.');
-      return;
-    }
-
-    const confirmMessage = currentLoan?.repaymentType === 'emi'
-      ? `Do you want to pay the monthly installment amount of ${formatAmount(amountToPay)}?`
-      : `Do you want to pay the outstanding balance of ${formatAmount(amountToPay)}?`;
-
-    const confirmAction = await new Promise<boolean>((resolve) => {
-      if (Platform.OS === 'web') {
-        const ok = window.confirm(confirmMessage);
-        resolve(ok);
-      } else {
-        Alert.alert(
-          'Confirm Repayment',
-          confirmMessage,
-          [
-            { text: 'Cancel', onPress: () => resolve(false), style: 'cancel' },
-            { text: 'Confirm & Pay', onPress: () => resolve(true) }
-          ]
-        );
-      }
-    });
-
-    if (!confirmAction) return;
-
-    setPaying(true);
-    try {
-      await RepaymentService.makeRepayment({
-        loanId: currentLoan.id,
-        amount: amountToPay,
-        paymentMethod: 'upi',
-        transactionRef: `TXN-CLIENT-${Date.now()}`,
-        remarks: 'Paid directly from customer app',
-      });
-      Alert.alert('Success', 'Repayment completed successfully!');
-      refetch();
-    } catch (err: any) {
-      Alert.alert('Error', err.friendlyMessage || 'Failed to submit payment.');
-    } finally {
-      setPaying(false);
-    }
+    router.push(`/loan/${currentLoan.id}`);
   };
 
   const renderActiveRepaymentHeader = () => {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { InputField } from '../../components/InputField';
@@ -19,16 +19,32 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('Please fill in all fields');
+      const msg = 'Please enter both your email address and password.';
+      setError(msg);
+      if (Platform.OS === 'web') {
+        window.alert(`Input Required\n\n${msg}`);
+      } else {
+        Alert.alert('Input Required', msg);
+      }
       return;
     }
     setError(null);
     setLoading(true);
     try {
-      await login(email, password);
-      // Auth guard in root layout will automatically redirect to tabs
+      await login(email.trim(), password);
     } catch (err: any) {
-      setError(err.friendlyMessage || 'Invalid email or password. Please try again.');
+      const failureReason = err.friendlyMessage || err.response?.data?.message || 'Invalid email address or password. Please check your credentials and try again.';
+      setError(failureReason);
+
+      if (Platform.OS === 'web') {
+        window.alert(`Login Failed ❌\n\n${failureReason}`);
+      } else {
+        Alert.alert(
+          'Login Failed ❌',
+          failureReason,
+          [{ text: 'Try Again' }]
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -42,7 +58,11 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
         {/* Header Branding */}
         <View style={styles.header}>
-          <Text style={[styles.brand, { color: theme.primary }]}>EasyPezyCash</Text>
+          <Image
+            source={require('../../../assets/images/logo.jpg')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={[styles.title, { color: theme.text }]}>Welcome Back</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             Log in to manage your active loans and repayments.
@@ -52,9 +72,12 @@ export default function LoginScreen() {
         {/* Form Fields */}
         <View style={styles.form}>
           {error && (
-            <View style={[styles.errorBox, { backgroundColor: theme.error + '15' }]}>
-              <AlertCircle size={18} color={theme.error} style={{ marginRight: 8 }} />
-              <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+            <View style={styles.errorBox}>
+              <AlertCircle size={20} color="#DC2626" style={{ marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.errorTitle}>Invalid Credentials</Text>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
             </View>
           )}
 
@@ -64,7 +87,10 @@ export default function LoginScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(val) => {
+              setEmail(val);
+              if (error) setError(null);
+            }}
             icon={<Mail size={20} color={theme.textSecondary} />}
           />
 
@@ -74,7 +100,10 @@ export default function LoginScreen() {
             secureTextEntry
             isPassword
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(val) => {
+              setPassword(val);
+              if (error) setError(null);
+            }}
             icon={<Lock size={20} color={theme.textSecondary} />}
           />
 
@@ -119,10 +148,9 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.five,
     alignItems: 'center',
   },
-  brand: {
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+  logoImage: {
+    width: 200,
+    height: 120,
     marginBottom: Spacing.two,
   },
   title: {
@@ -143,14 +171,24 @@ const styles = StyleSheet.create({
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: Brand.borderRadius.md,
-    marginBottom: Spacing.three,
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: Spacing.four,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  errorTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#991B1B',
+    marginBottom: 2,
   },
   errorText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    flex: 1,
+    color: '#DC2626',
+    lineHeight: 16,
   },
   forgotBtn: {
     alignSelf: 'flex-end',

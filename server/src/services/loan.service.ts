@@ -99,6 +99,13 @@ export class LoanService {
       "admin_message"
     );
 
+    await this.notificationService.notifyAdmins(
+      "New Loan Application Submitted 📥",
+      `${user.fullName || user.email} submitted a new loan application of ₹${data.loanAmount}.`,
+      "admin_message",
+      { loanId: loan.id, userId }
+    );
+
     return loan;
   }
 

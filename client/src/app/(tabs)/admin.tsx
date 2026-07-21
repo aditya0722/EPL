@@ -538,6 +538,8 @@ export default function AdminScreen() {
 
   // Tab config
   const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
+    { key: 'loans', label: 'Loans', icon: <FileText size={16} color={activeTab === 'loans' ? '#FFF' : '#64748B'} /> },
+    { key: 'verify_payments', label: 'Verify Payments', icon: <CheckCircle2 size={16} color={activeTab === 'verify_payments' ? '#FFF' : '#64748B'} /> },
     { key: 'kyc', label: 'KYC', icon: <Shield size={16} color={activeTab === 'kyc' ? '#FFF' : '#64748B'} /> },
     { key: 'repayments', label: 'Record', icon: <Coins size={16} color={activeTab === 'repayments' ? '#FFF' : '#64748B'} /> },
   ];
