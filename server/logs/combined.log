@@ -327,3 +327,5 @@
 {"level":"info","message":"Server is running in development mode on port 3000","timestamp":"2026-07-21 09:18:38"}
 {"level":"warn","message":"Cloudinary credentials missing. Falling back to local file storage for uploads.","timestamp":"2026-07-21 09:30:14"}
 {"level":"info","message":"Server is running in development mode on port 3000","timestamp":"2026-07-21 09:30:14"}
+{"level":"warn","message":"Cloudinary credentials missing. Falling back to local file storage for uploads.","timestamp":"2026-07-21 09:30:38"}
+{"level":"info","message":"Server is running in development mode on port 3000","timestamp":"2026-07-21 09:30:39"}
