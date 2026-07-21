@@ -21,9 +21,15 @@ export default function RegisterScreen() {
   const theme = Colors.light;
 
   const handleRegister = async () => {
-    // Validations
-    if (!fullName || !mobileNumber || !email || !password || !confirmPassword) {
-      setError('Please fill in all fields');
+    // Compulsory Field Validation
+    if (!fullName.trim() || !mobileNumber.trim() || !email.trim() || !password || !confirmPassword) {
+      const msg = 'All fields marked with * are compulsory. Please complete all fields.';
+      setError(msg);
+      if (Platform.OS === 'web') {
+        window.alert(`Registration Error ⚠️\n\n${msg}`);
+      } else {
+        Alert.alert('Compulsory Fields Required ⚠️', msg);
+      }
       return;
     }
 
@@ -88,49 +94,64 @@ export default function RegisterScreen() {
           )}
 
           <InputField
-            label="Full Name"
+            label="Full Name *"
             placeholder="John Doe"
             value={fullName}
-            onChangeText={setFullName}
+            onChangeText={(val) => {
+              setFullName(val);
+              if (error) setError(null);
+            }}
             icon={<User size={20} color={theme.textSecondary} />}
           />
 
           <InputField
-            label="Mobile Number"
+            label="Mobile Number *"
             placeholder="+91XXXXXXXXXX"
             keyboardType="phone-pad"
             value={mobileNumber}
-            onChangeText={setMobileNumber}
+            onChangeText={(val) => {
+              setMobileNumber(val);
+              if (error) setError(null);
+            }}
             icon={<Phone size={20} color={theme.textSecondary} />}
           />
 
           <InputField
-            label="Email Address"
+            label="Email Address *"
             placeholder="john@example.com"
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(val) => {
+              setEmail(val);
+              if (error) setError(null);
+            }}
             icon={<Mail size={20} color={theme.textSecondary} />}
           />
 
           <InputField
-            label="Password"
+            label="Password *"
             placeholder="••••••••"
             secureTextEntry
             isPassword
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(val) => {
+              setPassword(val);
+              if (error) setError(null);
+            }}
             icon={<Lock size={20} color={theme.textSecondary} />}
           />
 
           <InputField
-            label="Confirm Password"
+            label="Confirm Password *"
             placeholder="••••••••"
             secureTextEntry
             isPassword
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            onChangeText={(val) => {
+              setConfirmPassword(val);
+              if (error) setError(null);
+            }}
             icon={<Lock size={20} color={theme.textSecondary} />}
           />
 

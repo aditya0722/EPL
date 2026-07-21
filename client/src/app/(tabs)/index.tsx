@@ -591,7 +591,7 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            {user?.kycStatus !== 'verified' && data.profileCompletion < 80 ? (
+            {data.profileCompletion < 100 || user?.kycStatus !== 'verified' ? (
               <View style={styles.incompleteProfileContainer}>
                 <View style={styles.progressRow}>
                   <Text style={styles.progressText}>Profile Completion: {data.profileCompletion}%</Text>
@@ -599,15 +599,23 @@ export default function HomeScreen() {
                 <View style={styles.progressBarBg}>
                   <View style={[styles.progressBarFill, { width: `${data.profileCompletion}%` }]} />
                 </View>
-                <Text style={styles.incompleteWarningText}>
-                  ⚠️ Please complete your profile to at least 80% before applying for a loan.
-                </Text>
+                {data.profileCompletion < 100 ? (
+                  <Text style={styles.incompleteWarningText}>
+                    ⚠️ 100% profile completion required before applying for a loan.
+                  </Text>
+                ) : (
+                  <Text style={styles.incompleteWarningText}>
+                    🛡️ Admin KYC verification required before applying for a loan (Status: {user?.kycStatus?.toUpperCase() || 'PENDING'}).
+                  </Text>
+                )}
                 <Pressable
                   style={[styles.createAppBtn, { backgroundColor: '#4B5563', marginTop: 12 }]}
                   onPress={() => router.push('/profile')}
                 >
                   <User size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.createAppBtnText}>Complete Profile Now</Text>
+                  <Text style={styles.createAppBtnText}>
+                    {data.profileCompletion < 100 ? 'Complete Profile (100%)' : 'Check KYC Status'}
+                  </Text>
                 </Pressable>
               </View>
             ) : (

@@ -41,11 +41,14 @@ export class LoanService {
       throw new AppError("User not found", 404);
     }
 
-    // Verify profile is at least 80% complete (bypass if KYC is already verified)
+    // Verify profile is 100% complete and KYC is verified
     const userService = new UserService();
     const profile = await userService.getProfile(userId);
-    if (user.kycStatus !== "verified" && profile.profileCompletionPercentage < 80) {
-      throw new AppError("Please complete your profile to at least 80% before applying for a loan", 400);
+    if (profile.profileCompletionPercentage < 100) {
+      throw new AppError("Loan application requires 100% profile completion. Please complete your profile details first.", 400);
+    }
+    if (user.kycStatus !== "verified") {
+      throw new AppError("Loan application requires approved KYC verification. Your current KYC status is: " + user.kycStatus, 400);
     }
 
     const userLoans = await this.loanRepo.findByUserId(userId);

@@ -109,11 +109,33 @@ export default function ApplyLoanScreen() {
   });
 
   const handleSubmit = () => {
-    // Validate profile is complete again (bypass if KYC is already verified)
-    if (user?.kycStatus !== 'verified' && (user?.profileCompletionPercentage || 0) < 80) {
-      Alert.alert('Incomplete Profile', 'You must complete your profile to at least 80% before applying.');
+    const profilePct = user?.profileCompletionPercentage || 0;
+    const isKycApproved = user?.kycStatus === 'verified';
+
+    if (profilePct < 100) {
+      Alert.alert(
+        '100% Profile Completion Required ⚠️',
+        `Your profile is currently ${profilePct}% complete. You must complete 100% of your profile details before applying for a loan.`,
+        [
+          { text: 'Complete Profile', onPress: () => router.push('/(tabs)/profile') },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
       return;
     }
+
+    if (!isKycApproved) {
+      Alert.alert(
+        'KYC Approval Required 🛡️',
+        `Your current KYC status is "${user?.kycStatus || 'pending'}". Loan applications require approved KYC verification by admin.`,
+        [
+          { text: 'View Documents', onPress: () => router.push('/(tabs)/profile') },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
     applyMutation.mutate();
   };
 

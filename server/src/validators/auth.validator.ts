@@ -4,8 +4,8 @@ export const registerSchema = {
   body: z.object({
     email: z.string().email({ message: "Invalid email format" }),
     password: z.string().min(6, { message: "Password must be at least 6 characters" }),
-    fullName: z.string().min(2, { message: "Full Name is too short" }).optional(),
-    mobileNumber: z.string().optional(),
+    fullName: z.string().min(2, { message: "Full Name is required (minimum 2 characters)" }),
+    mobileNumber: z.string().min(10, { message: "Mobile number is required (minimum 10 digits)" }),
     role: z.enum(["user", "admin"]).optional(),
   }),
 };
