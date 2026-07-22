@@ -12,7 +12,9 @@ try {
         shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: true,
-      }),
+        shouldShowBanner: true,
+        shouldShowList: true,
+      } as any),
     });
   }
 } catch {

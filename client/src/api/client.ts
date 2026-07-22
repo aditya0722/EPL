@@ -11,6 +11,15 @@ const getApiUrl = () => {
 
 export const API_BASE_URL = getApiUrl();
 
+export const getMediaUrl = (url: string | null | undefined): string => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  const rootUrl = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+  return `${rootUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {

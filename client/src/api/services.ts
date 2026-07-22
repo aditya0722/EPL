@@ -171,7 +171,7 @@ export const RepaymentService = {
 };
 
 export const DocumentService = {
-  uploadQrCode: async (fileUri: string, fileName?: string, fileType?: string): Promise<{ success: boolean; data: UserDocument }> => {
+  uploadDocument: async (fileUri: string, documentType: string, fileName?: string, fileType?: string): Promise<{ success: boolean; data: UserDocument }> => {
     const formData = new FormData();
 
     let mimeType = fileType;
@@ -182,7 +182,7 @@ export const DocumentService = {
     }
 
     const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
-    const name = fileName && fileName !== 'unknown' ? fileName : `receipt_${Date.now()}.${ext}`;
+    const name = fileName && fileName !== 'unknown' ? fileName : `${documentType}_${Date.now()}.${ext}`;
 
     if (Platform.OS === 'web') {
       try {
@@ -207,24 +207,19 @@ export const DocumentService = {
       } as any);
     }
 
-    formData.append('documentType', 'other');
+    formData.append('documentType', documentType);
 
-    const token = getInMemoryAccessToken();
-    const response = await fetch(`${API_BASE_URL}/documents/upload`, {
-      method: 'POST',
-      body: formData,
+    const res = await apiClient.post('/documents/upload', formData, {
       headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
+        'Content-Type': 'multipart/form-data',
       },
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw { friendlyMessage: errorData.message || 'Failed to upload document' };
-    }
+    return res.data;
+  },
 
-    return await response.json();
+  uploadQrCode: async (fileUri: string, fileName?: string, fileType?: string): Promise<{ success: boolean; data: UserDocument }> => {
+    return DocumentService.uploadDocument(fileUri, 'other', fileName, fileType);
   },
 
   getUserDocuments: async (): Promise<{ success: boolean; data: UserDocument[] }> => {

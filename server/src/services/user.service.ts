@@ -22,8 +22,9 @@ export class UserService {
     }
     const docs = await this.docRepo.findByUserId(userId);
     const hasQrCode = docs.some((d) => d.documentType === "other");
+    const hasSelfie = docs.some((d) => d.documentType === "selfie");
     const { password, refreshToken, ...userWithoutSensitive } = user;
-    const completion = this.calculateCompletion(user, hasQrCode);
+    const completion = this.calculateCompletion(user, hasQrCode, hasSelfie);
     return {
       ...userWithoutSensitive,
       profileCompletionPercentage: completion,
@@ -75,15 +76,16 @@ export class UserService {
 
     const docs = await this.docRepo.findByUserId(userId);
     const hasQrCode = docs.some((d) => d.documentType === "other");
+    const hasSelfie = docs.some((d) => d.documentType === "selfie");
     const { password: _, refreshToken: __, ...userWithoutSensitive } = updatedUser;
-    const completion = this.calculateCompletion(updatedUser, hasQrCode);
+    const completion = this.calculateCompletion(updatedUser, hasQrCode, hasSelfie);
     return {
       ...userWithoutSensitive,
       profileCompletionPercentage: completion,
     };
   }
 
-  private calculateCompletion(user: typeof users.$inferSelect, hasQrCode: boolean): number {
+  private calculateCompletion(user: typeof users.$inferSelect, hasQrCode: boolean, hasSelfie: boolean): number {
     const mandatoryFields: (keyof typeof users.$inferSelect)[] = [
       "fullName",
       "mobileNumber",
@@ -113,7 +115,11 @@ export class UserService {
       filledCount++;
     }
 
-    const totalFields = mandatoryFields.length + 1; // mandatory fields + payment option
+    if (hasSelfie) {
+      filledCount++;
+    }
+
+    const totalFields = mandatoryFields.length + 2; // mandatory fields + payment option + mandatory selfie photo
 
     return Math.round((filledCount / totalFields) * 100);
   }

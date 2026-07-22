@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, Pressable, ScrollView, Alert, Platform, PanResponder, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
-import { LoanService } from '../api/services';
+import { LoanService, DocumentService } from '../api/services';
 import { Colors, Spacing } from '../constants/theme';
 import { Check, ChevronDown, Camera, CreditCard, DollarSign, Wallet, Calendar, Coins, Percent, FileText, User, IndianRupee } from 'lucide-react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -21,7 +21,7 @@ export default function ApplyLoanScreen() {
   const [sliderWidth, setSliderWidth] = useState(0);
 
   // Interest Calculations
-  const interestRate = scheme === 'emi' ? 0.40 : (0.08 * duration); // EMI is 40% flat, Normal is 8% flat per month
+  const interestRate = scheme === 'emi' ? 0.38 : (0.08 * duration); // EMI is 38% flat, Normal is 8% flat per month
   const interestAmount = Math.round(amount * interestRate);
   const totalRepayable = amount + interestAmount;
   const monthlyEmi = Math.round(totalRepayable / duration);
@@ -108,7 +108,26 @@ export default function ApplyLoanScreen() {
     },
   });
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    // Check mandatory photo upload first
+    try {
+      const docRes = await DocumentService.getUserDocuments();
+      const hasSelfie = docRes.data.some((d) => d.documentType === 'selfie');
+      if (!hasSelfie) {
+        Alert.alert(
+          'Mandatory Profile Photo Required 📸',
+          'You must upload your profile photo/selfie in your profile details before applying for a loan.',
+          [
+            { text: 'Upload Photo', onPress: () => router.push('/(tabs)/profile') },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+    } catch {
+      // Continue if doc check fails silently
+    }
+
     const profilePct = user?.profileCompletionPercentage || 0;
     const isKycApproved = user?.kycStatus === 'verified';
 
@@ -241,7 +260,7 @@ export default function ApplyLoanScreen() {
                 }
               ]}
             >
-              <Text style={{ color: scheme === 'emi' ? '#FFF' : '#666', fontWeight: '600', fontSize: 13 }}>EMI (40% Flat Int.)</Text>
+              <Text style={{ color: scheme === 'emi' ? '#FFF' : '#666', fontWeight: '600', fontSize: 13 }}>EMI</Text>
             </Pressable>
             <Pressable
               onPress={() => setScheme('normal')}
@@ -255,7 +274,7 @@ export default function ApplyLoanScreen() {
                 }
               ]}
             >
-              <Text style={{ color: scheme === 'normal' ? '#FFF' : '#666', fontWeight: '600', fontSize: 13 }}>Full Pay (8% Flat Int.)</Text>
+              <Text style={{ color: scheme === 'normal' ? '#FFF' : '#666', fontWeight: '600', fontSize: 13 }}>Full Pay</Text>
             </Pressable>
           </View>
 
@@ -378,14 +397,6 @@ export default function ApplyLoanScreen() {
           <Text style={styles.sectionTitle}>Calculated Offer Details</Text>
           <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16, marginVertical: 12, borderWidth: 1, borderColor: '#E5E7EB' }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={{ color: '#666', fontWeight: '500' }}>Interest Rate</Text>
-              <Text style={{ fontWeight: '700', color: '#1A2980' }}>{(interestRate * 100).toFixed(0)}% (FLAT)</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={{ color: '#666', fontWeight: '500' }}>Total Interest</Text>
-              <Text style={{ fontWeight: '700', color: '#333' }}>{formatCurrency(interestAmount)}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ color: '#666', fontWeight: '500' }}>Processing Fee</Text>
               <Text style={{ fontWeight: '700', color: '#EA580C' }}>{formatCurrency(processingFee)}</Text>
             </View>
@@ -397,12 +408,10 @@ export default function ApplyLoanScreen() {
               <Text style={{ color: '#666', fontWeight: '500' }}>Total Repayable</Text>
               <Text style={{ fontWeight: '700', color: '#333' }}>{formatCurrency(totalRepayable)}</Text>
             </View>
-            {scheme === 'emi' && (
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
-                <Text style={{ color: '#1A2980', fontWeight: '700' }}>Monthly Payment (EMI)</Text>
-                <Text style={{ fontWeight: '800', color: '#1D4ED8' }}>{formatCurrency(monthlyEmi)} / month</Text>
-              </View>
-            )}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
+              <Text style={{ color: '#1A2980', fontWeight: '700' }}>Calculated Monthly EMI</Text>
+              <Text style={{ fontWeight: '800', color: '#1D4ED8' }}>{formatCurrency(monthlyEmi)} / month</Text>
+            </View>
           </View>
 
           {/* REPAYMENT SCHEDULE MONTH-BY-MONTH */}

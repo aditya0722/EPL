@@ -15,7 +15,7 @@ async function startServer() {
   try {
     const migrationsFolder = path.join(__dirname, "db", "migrations");
     logger.info(`Checking database migrations from ${migrationsFolder}...`);
-    await migrate(db, { migrationsFolder });
+    await migrate(db, { migrationsFolder, migrationsSchema: "public" });
     logger.info("Database migrations applied successfully.");
   } catch (err) {
     logger.warn("Database migration startup notice:", err);

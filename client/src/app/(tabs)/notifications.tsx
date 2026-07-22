@@ -736,7 +736,7 @@ const styles = StyleSheet.create({
     paddingVertical: 120,
     paddingHorizontal: 32,
   },
-  emptyTitle: {
+  notifEmptyTitle: {
     fontSize: 16,
     fontWeight: '700',
   },

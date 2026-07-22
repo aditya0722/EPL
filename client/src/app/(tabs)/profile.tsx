@@ -4,13 +4,14 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import { UserService, DocumentService, AdminService } from '../../api/services';
+import { getMediaUrl } from '../../api/client';
 import { InputField } from '../../components/InputField';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { Colors, Spacing, Brand } from '../../constants/theme';
 import { 
   User, Phone, MapPin, Briefcase, IndianRupee, QrCode, LogOut, CheckCircle2, Lock, 
   UploadCloud, AlertCircle, Calendar, CreditCard, Landmark, Contact, Map as MapIcon, 
-  Search, ChevronDown, ChevronRight, X, Clock, XCircle, ShieldCheck, Shield, Mail, Users, Info
+  Search, ChevronDown, ChevronRight, X, Clock, XCircle, ShieldCheck, Shield, Mail, Users, Info, Camera
 } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -478,10 +479,10 @@ export default function ProfileScreen() {
               </Pressable>
             </View>
 
-            <FlatList
-              data={options}
-              keyExtractor={(item) => (typeof item === 'object' ? item.value : item)}
-              renderItem={({ item }) => {
+            <FlatList<any>
+              data={options as any[]}
+              keyExtractor={(item: any) => (typeof item === 'object' ? item.value : item)}
+              renderItem={({ item }: { item: any }) => {
                 const label = typeof item === 'object' ? item.label : item;
                 const value = typeof item === 'object' ? item.value : item;
                 
@@ -570,7 +571,7 @@ export default function ProfileScreen() {
     }
 
     setDetectingLocation(true);
-    const geo = Platform.OS === 'web' ? navigator.geolocation : (global as any).navigator?.geolocation;
+    const geo = Platform.OS === 'web' ? navigator.geolocation : (globalThis as any).navigator?.geolocation;
 
     if (!geo) {
       fetchIpLocation();
@@ -578,7 +579,7 @@ export default function ProfileScreen() {
     }
 
     geo.getCurrentPosition(
-      async (position) => {
+      async (position: any) => {
         const { latitude, longitude } = position.coords;
         try {
           const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`, {
@@ -610,7 +611,7 @@ export default function ProfileScreen() {
           setDetectingLocation(false);
         }
       },
-      (error) => {
+      (error: any) => {
         fetchIpLocation();
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
@@ -641,9 +642,11 @@ export default function ProfileScreen() {
     handleDetectLocation();
   }, []);
 
-  // QR Code Document URL state
+  // QR Code & Selfie Document URL state
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
+  const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
+  const [selfieLoading, setSelfieLoading] = useState(false);
 
   // Form states
   const [saving, setSaving] = useState(false);
@@ -651,7 +654,7 @@ export default function ProfileScreen() {
   const [success, setSuccess] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // Fetch QR Code Document URL on load
+  // Fetch Documents on load
   useEffect(() => {
     const fetchDocuments = async () => {
       try {
@@ -660,12 +663,52 @@ export default function ProfileScreen() {
         if (qrDoc) {
           setQrCodeUrl(qrDoc.cloudinaryUrl);
         }
+        const selfieDoc = response.data.find((d) => d.documentType === 'selfie');
+        if (selfieDoc) {
+          setSelfieUrl(selfieDoc.cloudinaryUrl);
+        }
       } catch (err) {
-        console.log('Error fetching user QR document', err);
+        console.log('Error fetching user documents', err);
       }
     };
     fetchDocuments();
   }, []);
+
+  const handlePickSelfie = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Permission to access gallery/camera is required to upload Profile Photo.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const fileUri = asset.uri;
+        const fileName = fileUri.split('/').pop() || 'selfie.jpg';
+        const fileType = asset.mimeType || 'image/jpeg';
+
+        setSelfieLoading(true);
+        setGlobalError(null);
+
+        const uploadRes = await DocumentService.uploadDocument(fileUri, 'selfie', fileName, fileType);
+        setSelfieUrl(uploadRes.data.cloudinaryUrl);
+
+        await refreshProfile();
+        Alert.alert('Success', 'Mandatory profile photo uploaded successfully!');
+      }
+    } catch (err: any) {
+      setGlobalError(err.friendlyMessage || 'Failed to upload profile photo.');
+    } finally {
+      setSelfieLoading(false);
+    }
+  };
 
   const handlePickQrCode = async () => {
     try {
@@ -917,6 +960,38 @@ export default function ProfileScreen() {
           {/* SECTION 1: PERSONAL DETAILS */}
           <Text style={styles.sectionTitle}>Personal Details</Text>
           <View style={styles.glassCard}>
+            {/* Mandatory Profile Photo / Selfie Card */}
+            <View style={{ marginBottom: 16, padding: 12, borderRadius: 12, backgroundColor: selfieUrl ? '#F8FAFC' : '#FEF2F2', borderWidth: 1, borderColor: selfieUrl ? '#CBD5E1' : '#FCA5A5' }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: selfieUrl ? '#1E293B' : '#991B1B', marginBottom: 4 }}>
+                Mandatory Profile Photo / Selfie *
+              </Text>
+              <Text style={{ fontSize: 11, color: selfieUrl ? '#64748B' : '#B91C1C', marginBottom: 12 }}>
+                {selfieUrl ? 'Verified profile photo uploaded' : 'Photo upload is compulsory before applying for any loan'}
+              </Text>
+              {selfieLoading ? (
+                <View style={styles.qrPlaceholder}>
+                  <ActivityIndicator size="large" color="#1A2980" />
+                  <Text style={{ marginTop: 8, color: '#666' }}>Uploading Photo...</Text>
+                </View>
+              ) : selfieUrl ? (
+                <View style={{ alignItems: 'center' }}>
+                  <Image source={{ uri: getMediaUrl(selfieUrl) }} style={{ width: 100, height: 100, borderRadius: 50, marginBottom: 12, borderWidth: 2, borderColor: '#1A2980' }} contentFit="cover" />
+                  <Pressable onPress={handlePickSelfie} style={styles.replaceQrBtn}>
+                    <UploadCloud size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.replaceQrText}>Change Photo</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable onPress={handlePickSelfie} style={[styles.qrUploadBox, { borderColor: '#EF4444', backgroundColor: '#FFFFFF' }]}>
+                  <View style={[styles.qrUploadIconBg, { backgroundColor: '#FEE2E2' }]}>
+                    <Camera size={26} color="#EF4444" />
+                  </View>
+                  <Text style={[styles.qrUploadText, { color: '#B91C1C' }]}>Tap to Upload Mandatory Selfie/Photo</Text>
+                  <Text style={styles.qrUploadSub}>Click to pick photo from gallery</Text>
+                </Pressable>
+              )}
+            </View>
+
             <InputField
               label="Full Name"
               placeholder="John Doe"
@@ -1220,7 +1295,7 @@ export default function ProfileScreen() {
               </View>
             ) : qrCodeUrl ? (
               <View style={styles.qrImageContainer}>
-                <Image source={{ uri: qrCodeUrl }} style={styles.qrImage} contentFit="contain" />
+                <Image source={{ uri: getMediaUrl(qrCodeUrl) }} style={styles.qrImage} contentFit="contain" />
                 <Pressable onPress={handlePickQrCode} style={styles.replaceQrBtn}>
                   <UploadCloud size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
                   <Text style={styles.replaceQrText}>Replace Image</Text>

@@ -1,6 +1,7 @@
 import { LoanRepository } from "../repositories/loan.repository.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import { AuditRepository } from "../repositories/audit.repository.js";
+import { DocumentRepository } from "../repositories/document.repository.js";
 import { NotificationService } from "./notification.service.js";
 import { UserService } from "./user.service.js";
 import { AppError } from "../utils/app-error.js";
@@ -10,12 +11,14 @@ export class LoanService {
   private loanRepo: LoanRepository;
   private userRepo: UserRepository;
   private auditRepo: AuditRepository;
+  private docRepo: DocumentRepository;
   private notificationService: NotificationService;
 
   constructor() {
     this.loanRepo = new LoanRepository();
     this.userRepo = new UserRepository();
     this.auditRepo = new AuditRepository();
+    this.docRepo = new DocumentRepository();
     this.notificationService = new NotificationService();
   }
 
@@ -41,7 +44,13 @@ export class LoanService {
       throw new AppError("User not found", 404);
     }
 
-    // Verify profile is 100% complete and KYC is verified
+    // Verify profile is 100% complete and mandatory selfie photo is uploaded
+    const docs = await this.docRepo.findByUserId(userId);
+    const hasSelfie = docs.some((d) => d.documentType === "selfie");
+    if (!hasSelfie) {
+      throw new AppError("Loan application requires a mandatory profile photo. Please upload your photo/selfie in your profile first.", 400);
+    }
+
     const userService = new UserService();
     const profile = await userService.getProfile(userId);
     if (profile.profileCompletionPercentage < 100) {
@@ -61,7 +70,7 @@ export class LoanService {
     }
 
     const repaymentType = data.repaymentType || "emi";
-    const interestRate = repaymentType === "emi" ? 40 : (8 * data.loanDuration); // EMI interest is 40% flat, Normal is 8% per month
+    const interestRate = repaymentType === "emi" ? 38 : (8 * data.loanDuration); // EMI interest is 38% flat, Normal is 8% per month
     const interestAmount = Math.round(data.loanAmount * (interestRate / 100));
     const totalPayable = data.loanAmount + interestAmount;
 
