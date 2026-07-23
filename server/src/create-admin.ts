@@ -4,7 +4,7 @@ import { hashPassword } from "./utils/security.js";
 import { eq } from "drizzle-orm";
 
 async function main() {
-  const adminPassword = await hashPassword("123456");
+  const adminPassword = await hashPassword("AdminEPC@123");
   
   // Try inserting
   try {
