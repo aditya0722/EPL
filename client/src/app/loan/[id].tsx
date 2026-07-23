@@ -8,6 +8,7 @@ import { Timeline } from '../../components/Timeline';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Colors, Brand, Spacing } from '../../constants/theme';
 import { LoadingSkeleton } from '../../components/LoadingSkeleton';
+import { cleanPurpose } from '../../utils/formatters';
 import { IndianRupee, FileText, Calendar, Clock, CreditCard, CheckCircle2, Info, ArrowLeft, UploadCloud, X, AlertCircle, XCircle, Wallet, Landmark, Banknote, MoreHorizontal } from 'lucide-react-native';
 
 export default function LoanDetailsScreen() {
@@ -210,8 +211,8 @@ export default function LoanDetailsScreen() {
         <View style={[styles.summaryCard, { backgroundColor: theme.backgroundElement }]}>
           <View style={styles.summaryHeader}>
             <View>
-              <Text style={[styles.amountLabel, { color: theme.textSecondary }]}>Applied Loan Amount</Text>
-              <Text style={[styles.amountValue, { color: theme.text }]}>{formatAmount(loan.loanAmount)}</Text>
+              <Text style={[styles.amountLabel, { color: theme.textSecondary }]}>Payable Loan Amount</Text>
+              <Text style={[styles.amountValue, { color: theme.text }]}>{formatAmount(totalPayable)}</Text>
             </View>
             <StatusBadge status={loan.status} />
           </View>
@@ -220,9 +221,9 @@ export default function LoanDetailsScreen() {
 
           <View style={styles.summaryGrid}>
             <View style={styles.gridCol}>
-              <Text style={[styles.gridLabel, { color: theme.textSecondary }]}>Purpose</Text>
+              <Text style={[styles.gridLabel, { color: theme.textSecondary }]}>Scheme / Purpose</Text>
               <Text style={[styles.gridValue, { color: theme.text }]} numberOfLines={1}>
-                {loan.loanPurpose}
+                {cleanPurpose(loan.loanPurpose)}
               </Text>
             </View>
             <View style={styles.gridCol}>
@@ -237,8 +238,10 @@ export default function LoanDetailsScreen() {
               <Text style={[styles.gridValue, { color: theme.text }]}>{formatDate(loan.createdAt)}</Text>
             </View>
             <View style={styles.gridCol}>
-              <Text style={[styles.gridLabel, { color: theme.textSecondary }]}>Monthly Income</Text>
-              <Text style={[styles.gridValue, { color: theme.text }]}>{formatAmount(loan.monthlyIncome)}</Text>
+              <Text style={[styles.gridLabel, { color: theme.textSecondary }]}>Repayment Scheme</Text>
+              <Text style={[styles.gridValue, { color: theme.text }]}>
+                {loan.repaymentType === 'emi' ? 'EMI Scheme' : 'Normal Scheme'}
+              </Text>
             </View>
           </View>
         </View>

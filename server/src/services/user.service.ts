@@ -96,10 +96,14 @@ export class UserService {
       "district",
       "pincode",
       "occupation",
+      "monthlyIncome",
       "bankAccountNo",
       "bankIfsc",
       "bankName",
-      "aadhaarNumber"
+      "aadhaarNumber",
+      "panNumber",
+      "emergencyContact",
+      "upiId"
     ];
 
     let filledCount = 0;
@@ -110,8 +114,7 @@ export class UserService {
       }
     });
 
-    const hasPaymentOption = (user.upiId !== null && user.upiId !== undefined && user.upiId !== "") || hasQrCode;
-    if (hasPaymentOption) {
+    if (hasQrCode) {
       filledCount++;
     }
 
@@ -119,7 +122,7 @@ export class UserService {
       filledCount++;
     }
 
-    const totalFields = mandatoryFields.length + 2; // mandatory fields + payment option + mandatory selfie photo
+    const totalFields = mandatoryFields.length + 2; // mandatory fields + QR Code image + mandatory selfie photo
 
     return Math.round((filledCount / totalFields) * 100);
   }

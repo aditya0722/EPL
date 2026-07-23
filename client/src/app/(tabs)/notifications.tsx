@@ -9,6 +9,7 @@ import {
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { LoadingSkeleton } from '../../components/LoadingSkeleton';
+import { cleanPurpose } from '../../utils/formatters';
 
 export default function NotificationsOrPaymentsScreen() {
   const { user } = useAuth();
@@ -296,7 +297,7 @@ function AdminPaymentsHub() {
                       </View>
                       <View style={styles.paymentDetailRow}>
                         <Text style={styles.paymentDetailLabel}>Loan Purpose</Text>
-                        <Text style={styles.paymentDetailValue}>{loan.loanPurpose} ({formatCurrency(loan.loanAmount)})</Text>
+                        <Text style={styles.paymentDetailValue}>{cleanPurpose(loan.loanPurpose)} ({formatCurrency(loan.loanAmount)})</Text>
                       </View>
                       {repayment.remarks && (
                         <View style={styles.paymentDetailRow}>
@@ -507,7 +508,7 @@ function AdminPaymentsHub() {
                           </View>
                           <View style={{ width: '45%' }}>
                             <Text style={styles.detailLabel}>associated loan</Text>
-                            <Text style={[styles.detailValue, { fontSize: 11 }]}>{loan.loanPurpose} ({formatCurrency(loan.loanAmount)})</Text>
+                            <Text style={[styles.detailValue, { fontSize: 11 }]}>{cleanPurpose(loan.loanPurpose)} ({formatCurrency(loan.loanAmount)})</Text>
                           </View>
                           <View style={{ width: '45%' }}>
                             <Text style={styles.detailLabel}>client contact</Text>

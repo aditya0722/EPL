@@ -6,6 +6,8 @@ const getApiUrl = () => {
   if (Platform.OS === 'web') {
     return 'http://localhost:3000/api/v1';
   }
+ 
+  
   return 'https://epl-1-498g.onrender.com/api/v1';
 };
 
@@ -145,8 +147,25 @@ apiClient.interceptors.response.use(
     }
 
     // Format server error response messages
-    const message = error.response?.data?.message || 'Something went wrong';
-    error.friendlyMessage = message;
+    if (error.response?.data) {
+      const data = error.response.data;
+      if (Array.isArray(data.errors) && data.errors.length > 0) {
+        const errorDetails = data.errors
+          .map((e: any) => typeof e === 'string' ? e : (e.message || (e.field ? `${e.field}: ${e.message}` : JSON.stringify(e))))
+          .join('\n• ');
+        error.friendlyMessage = `${data.message || 'Validation failed'}:\n• ${errorDetails}`;
+      } else if (data.message) {
+        error.friendlyMessage = data.message;
+      } else {
+        error.friendlyMessage = 'An unexpected error occurred on the server.';
+      }
+    } else if (error.message === 'Network Error' || error.code === 'ERR_NETWORK') {
+      error.friendlyMessage = `Unable to connect to server at ${API_BASE_URL}.\n\nPlease ensure your server is running and accessible.`;
+    } else if (error.message) {
+      error.friendlyMessage = error.message;
+    } else {
+      error.friendlyMessage = 'Something went wrong. Please try again.';
+    }
     return Promise.reject(error);
   }
 );

@@ -89,7 +89,7 @@ export default function ApplyLoanScreen() {
     mutationFn: async () => {
       const res = await LoanService.apply({
         loanAmount: amount,
-        loanPurpose: `${scheme === 'emi' ? 'EMI' : 'Normal'} Scheme: ${duration} Months @ ${interestRate * 100}% Flat Interest (Principal: ₹${amount.toLocaleString('en-IN')}, Interest: ₹${interestAmount.toLocaleString('en-IN')}, Processing Fee: ₹${processingFee.toLocaleString('en-IN')})`,
+        loanPurpose: `${scheme === 'emi' ? 'EMI Scheme' : 'Normal Scheme'} - ${duration} Months`,
         employmentType: user?.occupation || 'salaried',
         monthlyIncome: user?.monthlyIncome ? Number(user.monthlyIncome) : 30000,
         loanDuration: duration,
@@ -397,21 +397,23 @@ export default function ApplyLoanScreen() {
           <Text style={styles.sectionTitle}>Calculated Offer Details</Text>
           <View style={{ backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16, marginVertical: 12, borderWidth: 1, borderColor: '#E5E7EB' }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={{ color: '#666', fontWeight: '500' }}>Processing Fee</Text>
-              <Text style={{ fontWeight: '700', color: '#EA580C' }}>{formatCurrency(processingFee)}</Text>
+              <Text style={{ color: '#666', fontWeight: '500' }}>Duration</Text>
+              <Text style={{ fontWeight: '700', color: '#333' }}>{duration} Months</Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ color: '#666', fontWeight: '500' }}>Disbursal Amount</Text>
-              <Text style={{ fontWeight: '700', color: '#10B981' }}>{formatCurrency(amount - processingFee)}</Text>
+              <Text style={{ fontWeight: '700', color: '#10B981' }}>{formatCurrency(amount)}</Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={{ color: '#666', fontWeight: '500' }}>Total Repayable</Text>
-              <Text style={{ fontWeight: '700', color: '#333' }}>{formatCurrency(totalRepayable)}</Text>
+              <Text style={{ color: '#666', fontWeight: '500' }}>Payable Amount</Text>
+              <Text style={{ fontWeight: '700', color: '#1A2980' }}>{formatCurrency(totalRepayable)}</Text>
             </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
-              <Text style={{ color: '#1A2980', fontWeight: '700' }}>Calculated Monthly EMI</Text>
-              <Text style={{ fontWeight: '800', color: '#1D4ED8' }}>{formatCurrency(monthlyEmi)} / month</Text>
-            </View>
+            {scheme === 'emi' && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
+                <Text style={{ color: '#1A2980', fontWeight: '700' }}>Calculated Monthly EMI</Text>
+                <Text style={{ fontWeight: '800', color: '#1D4ED8' }}>{formatCurrency(monthlyEmi)} / month</Text>
+              </View>
+            )}
           </View>
 
           {/* REPAYMENT SCHEDULE MONTH-BY-MONTH */}

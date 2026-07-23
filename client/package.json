@@ -16,6 +16,7 @@
     "expo-image-picker": "~57.0.2",
     "expo-linear-gradient": "~57.0.0",
     "expo-linking": "~57.0.2",
+    "expo-location": "~57.0.6",
     "expo-notifications": "^57.0.6",
     "expo-router": "~57.0.4",
     "expo-secure-store": "~57.0.0",
@@ -47,7 +48,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:android:apk": "cd android && ./gradlew assembleRelease",
+    "build:android:bundle": "cd android && ./gradlew bundleRelease"
   },
   "private": true
 }

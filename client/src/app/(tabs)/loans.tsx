@@ -7,6 +7,7 @@ import { UserService, AdminService, LoanService, RepaymentService } from '../../
 import { StatusBadge } from '../../components/StatusBadge';
 import { Colors, Brand, Spacing } from '../../constants/theme';
 import { LoadingSkeleton } from '../../components/LoadingSkeleton';
+import { cleanPurpose } from '../../utils/formatters';
 import { 
   FileText, Calendar, Clock, ArrowRight, Coins, CreditCard, Shield, CheckCircle2, 
   XCircle, ArrowRightLeft, Landmark, User, ArrowLeft, Mail, Phone, UploadCloud, 
@@ -540,49 +541,56 @@ function UserLoansHistory() {
     );
   };
 
-  const renderLoanItem = ({ item }: { item: any }) => (
-    <Pressable
-      onPress={() => router.push(`/loan/${item.id}`)}
-      style={({ pressed }) => [
-        styles.card,
-        {
-          backgroundColor: theme.backgroundElement,
-          opacity: pressed ? 0.95 : 1,
-          transform: [{ scale: pressed ? 0.99 : 1 }],
-        },
-      ]}
-    >
-      <View style={styles.cardHeader}>
-        <View>
-          <Text style={[styles.amountText, { color: theme.text }]}>{formatAmount(item.loanAmount)}</Text>
-          <Text style={[styles.purposeText, { color: theme.textSecondary }]}>{item.loanPurpose}</Text>
-        </View>
-        <StatusBadge status={item.status} />
-      </View>
+  const renderLoanItem = ({ item }: { item: any }) => {
+    const loanAmt = Number(item.loanAmount || 0);
+    const totalPayable = Number(item.totalPayable) || (item.repaymentType === 'emi' ? Math.round(loanAmt * 1.4) : Math.round(loanAmt * 1.08));
 
-      <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-      <View style={styles.cardDetails}>
-        <View style={styles.detailRow}>
-          <Calendar size={14} color={theme.textSecondary} style={{ marginRight: 6 }} />
-          <Text style={[styles.detailText, { color: theme.textSecondary }]}>
-            Applied: {formatDate(item.createdAt)}
-          </Text>
+    return (
+      <Pressable
+        onPress={() => router.push(`/loan/${item.id}`)}
+        style={({ pressed }) => [
+          styles.card,
+          {
+            backgroundColor: theme.backgroundElement,
+            opacity: pressed ? 0.95 : 1,
+            transform: [{ scale: pressed ? 0.99 : 1 }],
+          },
+        ]}
+      >
+        <View style={styles.cardHeader}>
+          <View>
+            <Text style={[styles.amountText, { color: theme.text }]}>{formatAmount(totalPayable)}</Text>
+            <Text style={[styles.purposeText, { color: theme.textSecondary }]}>
+              Payable Amount • {cleanPurpose(item.loanPurpose)}
+            </Text>
+          </View>
+          <StatusBadge status={item.status} />
         </View>
-        <View style={styles.detailRow}>
-          <Clock size={14} color={theme.textSecondary} style={{ marginRight: 6 }} />
-          <Text style={[styles.detailText, { color: theme.textSecondary }]}>
-            Duration: {item.loanDuration} Months
-          </Text>
-        </View>
-      </View>
 
-      <View style={styles.arrowRow}>
-        <Text style={[styles.actionLink, { color: theme.primary }]}>View Timeline</Text>
-        <ArrowRight size={14} color={theme.primary} />
-      </View>
-    </Pressable>
-  );
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+        <View style={styles.cardDetails}>
+          <View style={styles.detailRow}>
+            <Calendar size={14} color={theme.textSecondary} style={{ marginRight: 6 }} />
+            <Text style={[styles.detailText, { color: theme.textSecondary }]}>
+              Applied: {formatDate(item.createdAt)}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Clock size={14} color={theme.textSecondary} style={{ marginRight: 6 }} />
+            <Text style={[styles.detailText, { color: theme.textSecondary }]}>
+              Duration: {item.loanDuration} Months
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.arrowRow}>
+          <Text style={[styles.actionLink, { color: theme.primary }]}>View Details</Text>
+          <ArrowRight size={14} color={theme.primary} />
+        </View>
+      </Pressable>
+    );
+  };
 
   const renderPaymentItem = ({ item }: { item: any }) => (
     <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>

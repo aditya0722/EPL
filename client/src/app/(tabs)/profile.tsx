@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Dimensions, RefreshControl, TextInput, Modal, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
 import { UserService, DocumentService, AdminService } from '../../api/services';
 import { getMediaUrl } from '../../api/client';
@@ -11,19 +12,398 @@ import { Colors, Spacing, Brand } from '../../constants/theme';
 import { 
   User, Phone, MapPin, Briefcase, IndianRupee, QrCode, LogOut, CheckCircle2, Lock, 
   UploadCloud, AlertCircle, Calendar, CreditCard, Landmark, Contact, Map as MapIcon, 
-  Search, ChevronDown, ChevronRight, X, Clock, XCircle, ShieldCheck, Shield, Mail, Users, Info, Camera
+  Search, ChevronDown, ChevronRight, X, Clock, XCircle, ShieldCheck, Shield, Mail, Users, Info, Camera, Eye
 } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
+import { cleanPurpose } from '../../utils/formatters';
 
 const { width } = Dimensions.get('window');
+
+function AdminUserItemCard({
+  u,
+  isExpanded,
+  onToggleExpand,
+  loans,
+  onOpenPreview,
+  refetchUsers,
+  router,
+}: {
+  u: any;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  loans: any[];
+  onOpenPreview: (url: string, title: string) => void;
+  refetchUsers: () => void;
+  router: any;
+}) {
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Fetch documents for this specific user when expanded
+  const { data: userDocs = [], isLoading: loadingDocs, refetch: refetchDocs } = useQuery({
+    queryKey: ['adminUserDocuments', u.id],
+    queryFn: async () => {
+      const res = await AdminService.getUserDocuments(u.id);
+      return res.data || [];
+    },
+    enabled: isExpanded,
+  });
+
+  const selfieDoc = userDocs.find((d: any) => d.documentType === 'selfie');
+
+  const getInitials = (name: string | null) => {
+    if (!name) return '?';
+    return name.split(' ').map((n) => n[0]).join('').toUpperCase().substring(0, 2);
+  };
+
+  const getKycStatusStyle = (status: string) => {
+    switch (status) {
+      case 'verified': return { bg: '#D1FAE5', color: '#065F46' };
+      case 'submitted': return { bg: '#FEF3C7', color: '#D97706' };
+      case 'pending': return { bg: '#F1F5F9', color: '#475569' };
+      case 'rejected': return { bg: '#FEE2E2', color: '#B91C1C' };
+      default: return { bg: '#F1F5F9', color: '#64748B' };
+    }
+  };
+
+  const getLoanStatusStyle = (status: string) => {
+    switch (status) {
+      case 'pending': return { bg: '#FEF3C7', color: '#D97706' };
+      case 'approved': return { bg: '#D1FAE5', color: '#065F46' };
+      case 'disbursed': return { bg: '#DBEAFE', color: '#1E40AF' };
+      case 'rejected': return { bg: '#FEE2E2', color: '#B91C1C' };
+      case 'closed': return { bg: '#F1F5F9', color: '#475569' };
+      case 'defaulted': return { bg: '#FEE2E2', color: '#B91C1C' };
+      default: return { bg: '#F1F5F9', color: '#64748B' };
+    }
+  };
+
+  const formatCurrency = (val: string | number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(Number(val));
+  };
+
+  const handleUpdateKyc = async (status: 'verified' | 'rejected') => {
+    try {
+      setActionLoading(true);
+      await AdminService.verifyUserKyc(u.id, status);
+      await refetchUsers();
+      await refetchDocs();
+      Alert.alert('KYC Status Updated', `User KYC status has been updated to ${status.toUpperCase()}`);
+    } catch (err: any) {
+      Alert.alert('Error', err.friendlyMessage || 'Failed to update KYC status');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const kycStyle = getKycStatusStyle(u.kycStatus);
+  const userLoans = loans.filter((l: any) => l.loan.userId === u.id);
+  const hasActiveLoan = userLoans.some((l: any) => ['pending', 'approved', 'disbursed', 'defaulted'].includes(l.loan.status));
+
+  const docLabels: Record<string, string> = {
+    aadhaar_front: 'Aadhaar Card (Front)',
+    aadhaar_back: 'Aadhaar Card (Back)',
+    pan_card: 'PAN Card',
+    selfie: 'Mandatory Profile Photo / Selfie',
+    salary_slip: 'Salary Slip',
+    bank_statement: 'Bank Statement',
+    other: 'Payment QR Code Image',
+  };
+
+  return (
+    <View style={[styles.userCard, isExpanded && styles.userCardExpanded]}>
+      {/* Compact Header Row */}
+      <Pressable style={styles.userCardHeader} onPress={onToggleExpand}>
+        {selfieDoc ? (
+          <Image
+            source={{ uri: getMediaUrl(selfieDoc.cloudinaryUrl) }}
+            style={{ width: 44, height: 44, borderRadius: 22, marginRight: 12, borderWidth: 1.5, borderColor: '#4F46E5' }}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={[styles.userAvatar, { backgroundColor: '#EEF2FF' }]}>
+            <Text style={styles.userAvatarText}>{getInitials(u.fullName)}</Text>
+          </View>
+        )}
+        <View style={styles.userSummaryInfo}>
+          <Text style={styles.userNameText} numberOfLines={1}>{u.fullName || 'New User'}</Text>
+          <Text style={styles.userMetaText}>{u.mobileNumber || 'No phone number'}</Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <View style={[styles.statusBadge, { backgroundColor: kycStyle.bg, marginBottom: 4 }]}>
+            <Text style={[styles.statusBadgeText, { color: kycStyle.color }]}>
+              KYC {u.kycStatus.toUpperCase()}
+            </Text>
+          </View>
+          <Text style={styles.userLoansCountText}>
+            {userLoans.length} loan{userLoans.length !== 1 ? 's' : ''} {hasActiveLoan && '• Active 🔵'}
+          </Text>
+        </View>
+        <ChevronDown
+          size={16}
+          color="#94A3B8"
+          style={{ marginLeft: 8, transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
+        />
+      </Pressable>
+
+      {/* Expanded Details */}
+      {isExpanded && (
+        <View style={styles.expandedDetailsContainer}>
+          <View style={styles.expandDivider} />
+
+          {/* User Profile Header Card */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: '#E2E8F0' }}>
+            {selfieDoc ? (
+              <Pressable onPress={() => onOpenPreview(selfieDoc.cloudinaryUrl, `${u.fullName || 'User'} - Profile Photo`)}>
+                <Image source={{ uri: getMediaUrl(selfieDoc.cloudinaryUrl) }} style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: '#1A2980', marginRight: 12 }} contentFit="cover" />
+              </Pressable>
+            ) : (
+              <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                <User size={30} color="#64748B" />
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A' }}>{u.fullName || 'User Profile'}</Text>
+              <Text style={{ fontSize: 12, color: '#64748B' }}>{u.email}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: '#4F46E5', marginRight: 8 }}>
+                  Profile Completion: {u.profileCompletionPercentage || 0}%
+                </Text>
+                <View style={[styles.statusBadge, { backgroundColor: kycStyle.bg }]}>
+                  <Text style={[styles.statusBadgeText, { color: kycStyle.color }]}>
+                    KYC {u.kycStatus.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Section: Personal Info */}
+          <Text style={styles.detailSectionHeader}>Personal Information</Text>
+          <View style={styles.detailsGrid}>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>Email</Text>
+              <Text style={styles.detailsValue} numberOfLines={1}>{u.email}</Text>
+            </View>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>DOB</Text>
+              <Text style={styles.detailsValue}>{u.dob ? new Date(u.dob).toLocaleDateString('en-IN') : 'Not provided'}</Text>
+            </View>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>Gender</Text>
+              <Text style={styles.detailsValue}>{u.gender ? u.gender.toUpperCase() : 'Not provided'}</Text>
+            </View>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>Emergency Contact</Text>
+              <Text style={styles.detailsValue}>{u.emergencyContact || 'Not provided'}</Text>
+            </View>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>Aadhaar</Text>
+              <Text style={styles.detailsValue}>{u.aadhaarNumber || 'Not provided'}</Text>
+            </View>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>PAN</Text>
+              <Text style={styles.detailsValue}>{u.panNumber || 'Not provided'}</Text>
+            </View>
+          </View>
+
+          {/* Section: Address Info */}
+          <Text style={styles.detailSectionHeader}>Address</Text>
+          <View style={styles.addressBox}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 }}>
+              <MapPin size={14} color="#64748B" style={{ marginRight: 6, marginTop: 2 }} />
+              <Text style={styles.addressValueText}>{u.address || 'Address not updated'}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 20 }}>
+              <View>
+                <Text style={styles.detailsLabel}>District</Text>
+                <Text style={styles.detailsValue}>{u.district || 'N/A'}</Text>
+              </View>
+              <View>
+                <Text style={styles.detailsLabel}>State</Text>
+                <Text style={styles.detailsValue}>{u.state || 'N/A'}</Text>
+              </View>
+              <View>
+                <Text style={styles.detailsLabel}>Pincode</Text>
+                <Text style={styles.detailsValue}>{u.pincode || 'N/A'}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Section: Employment */}
+          <Text style={styles.detailSectionHeader}>Employment & Financials</Text>
+          <View style={styles.detailsGrid}>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>Occupation</Text>
+              <Text style={styles.detailsValue}>{u.occupation || 'Not provided'}</Text>
+            </View>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>Monthly Income</Text>
+              <Text style={styles.detailsValue}>{u.monthlyIncome ? formatCurrency(u.monthlyIncome) : 'Not provided'}</Text>
+            </View>
+          </View>
+
+          {/* Section: Bank details */}
+          <Text style={styles.detailSectionHeader}>Bank Account & Payments</Text>
+          <View style={styles.detailsGrid}>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>Bank Name</Text>
+              <Text style={styles.detailsValue}>{u.bankName || 'Not provided'}</Text>
+            </View>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>Account No</Text>
+              <Text style={styles.detailsValue}>{u.bankAccountNo || 'Not provided'}</Text>
+            </View>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>IFSC Code</Text>
+              <Text style={styles.detailsValue}>{u.bankIfsc || 'Not provided'}</Text>
+            </View>
+            <View style={styles.detailsGridItem}>
+              <Text style={styles.detailsLabel}>UPI ID</Text>
+              <Text style={styles.detailsValue}>{u.upiId || 'Not provided'}</Text>
+            </View>
+          </View>
+
+          {/* Section: Media & Uploaded Documents */}
+          <Text style={styles.detailSectionHeader}>Uploaded Media & Photos</Text>
+          {loadingDocs ? (
+            <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#4F46E5" />
+              <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>Loading user documents...</Text>
+            </View>
+          ) : userDocs.length === 0 ? (
+            <View style={styles.noLoansBox}>
+              <Info size={14} color="#94A3B8" style={{ marginRight: 6 }} />
+              <Text style={styles.noLoansText}>No documents or photos uploaded by user yet.</Text>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginVertical: 8 }}>
+              {userDocs.map((doc: any) => {
+                const label = docLabels[doc.documentType] || doc.documentType;
+                return (
+                  <Pressable
+                    key={doc.id}
+                    onPress={() => onOpenPreview(doc.cloudinaryUrl, `${u.fullName || 'User'} - ${label}`)}
+                    style={{
+                      width: '48%',
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: 12,
+                      padding: 8,
+                      borderWidth: 1,
+                      borderColor: '#E2E8F0',
+                    }}
+                  >
+                    <Image
+                      source={{ uri: getMediaUrl(doc.cloudinaryUrl) }}
+                      style={{ width: '100%', height: 110, borderRadius: 8, marginBottom: 6 }}
+                      contentFit="cover"
+                    />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#1E293B' }} numberOfLines={1}>{label}</Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                      <Text style={{ fontSize: 9, color: doc.status === 'approved' ? '#059669' : doc.status === 'rejected' ? '#DC2626' : '#D97706', fontWeight: '700' }}>
+                        {doc.status.toUpperCase()}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Eye size={12} color="#4F46E5" style={{ marginRight: 2 }} />
+                        <Text style={{ fontSize: 10, color: '#4F46E5', fontWeight: '600' }}>View</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Section: KYC Quick Actions for Admin */}
+          <Text style={styles.detailSectionHeader}>KYC Verification Actions</Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginVertical: 8 }}>
+            <Pressable
+              style={{
+                flex: 1,
+                backgroundColor: '#10B981',
+                paddingVertical: 10,
+                borderRadius: 10,
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                opacity: actionLoading ? 0.7 : 1,
+              }}
+              onPress={() => handleUpdateKyc('verified')}
+              disabled={actionLoading}
+            >
+              <CheckCircle2 size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>Approve User KYC</Text>
+            </Pressable>
+
+            <Pressable
+              style={{
+                flex: 1,
+                backgroundColor: '#EF4444',
+                paddingVertical: 10,
+                borderRadius: 10,
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                opacity: actionLoading ? 0.7 : 1,
+              }}
+              onPress={() => handleUpdateKyc('rejected')}
+              disabled={actionLoading}
+            >
+              <XCircle size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>Reject User KYC</Text>
+            </Pressable>
+          </View>
+
+          {/* Section: Loans details */}
+          <Text style={styles.detailSectionHeader}>Loans List</Text>
+          {userLoans.length === 0 ? (
+            <View style={styles.noLoansBox}>
+              <Info size={14} color="#94A3B8" style={{ marginRight: 6 }} />
+              <Text style={styles.noLoansText}>User hasn't applied for any loans yet.</Text>
+            </View>
+          ) : (
+            userLoans.map((item: any) => {
+              const { loan } = item;
+              const loanStatus = getLoanStatusStyle(loan.status);
+              const loanDate = new Date(loan.createdAt).toLocaleDateString('en-IN');
+              return (
+                <View key={loan.id} style={styles.userLoanMiniCard}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={styles.userLoanAmount}>{formatCurrency(loan.loanAmount)}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: loanStatus.bg }]}>
+                      <Text style={[styles.statusBadgeText, { color: loanStatus.color }]}>
+                        {loan.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.loanCardDivider} />
+                  <View style={styles.userLoanDetailsRow}>
+                    <Text style={styles.userLoanDetailCol}>Applied: {loanDate}</Text>
+                    <Text style={styles.userLoanDetailCol}>Tenure: {loan.loanDuration} Months</Text>
+                    <Text style={styles.userLoanDetailCol}>{loan.repaymentType === 'emi' ? 'EMI' : 'Full Payment'}</Text>
+                  </View>
+                  <Text style={styles.userLoanPurpose}>Purpose: {cleanPurpose(loan.loanPurpose)}</Text>
+                </View>
+              );
+            })
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
 
 function AdminUsersView({ logout, theme, router }: { logout: () => void; theme: any; router: any }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [kycFilter, setKycFilter] = useState<'all' | 'verified' | 'submitted' | 'pending' | 'rejected'>('all');
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
   // Fetch all users
   const { data: users = [], isLoading: loadingUsers, refetch: refetchUsers } = useQuery({
@@ -50,41 +430,6 @@ function AdminUsersView({ logout, theme, router }: { logout: () => void; theme: 
       await refetchLoans();
     } finally {
       setRefreshing(false);
-    }
-  };
-
-  const formatCurrency = (val: string | number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(Number(val));
-  };
-
-  const getInitials = (name: string | null) => {
-    if (!name) return '?';
-    return name.split(' ').map((n) => n[0]).join('').toUpperCase().substring(0, 2);
-  };
-
-  const getKycStatusStyle = (status: string) => {
-    switch (status) {
-      case 'verified': return { bg: '#D1FAE5', color: '#065F46' };
-      case 'submitted': return { bg: '#FEF3C7', color: '#D97706' };
-      case 'pending': return { bg: '#F1F5F9', color: '#475569' };
-      case 'rejected': return { bg: '#FEE2E2', color: '#B91C1C' };
-      default: return { bg: '#F1F5F9', color: '#64748B' };
-    }
-  };
-
-  const getLoanStatusStyle = (status: string) => {
-    switch (status) {
-      case 'pending': return { bg: '#FEF3C7', color: '#D97706' };
-      case 'approved': return { bg: '#D1FAE5', color: '#065F46' };
-      case 'disbursed': return { bg: '#DBEAFE', color: '#1E40AF' };
-      case 'rejected': return { bg: '#FEE2E2', color: '#B91C1C' };
-      case 'closed': return { bg: '#F1F5F9', color: '#475569' };
-      case 'defaulted': return { bg: '#FEE2E2', color: '#B91C1C' };
-      default: return { bg: '#F1F5F9', color: '#64748B' };
     }
   };
 
@@ -119,11 +464,36 @@ function AdminUsersView({ logout, theme, router }: { logout: () => void; theme: 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={[styles.adminContainer, { backgroundColor: '#F8FAFC' }]}
     >
+      {/* Full Resolution Document Image Preview Modal */}
+      <Modal visible={!!previewImage} transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+          <View style={{ width: '100%', maxWidth: 500, backgroundColor: '#1E293B', borderRadius: 16, overflow: 'hidden' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#334155' }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', flex: 1, marginRight: 8 }} numberOfLines={1}>
+                {previewImage?.title || 'Document Preview'}
+              </Text>
+              <Pressable onPress={() => setPreviewImage(null)} style={{ padding: 4 }}>
+                <X size={22} color="#FFFFFF" />
+              </Pressable>
+            </View>
+            <View style={{ width: '100%', height: 380, padding: 12, justifyContent: 'center', alignItems: 'center' }}>
+              {previewImage?.url ? (
+                <Image
+                  source={{ uri: getMediaUrl(previewImage.url) }}
+                  style={{ width: '100%', height: '100%' }}
+                  contentFit="contain"
+                />
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Header */}
       <View style={styles.adminHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.adminTitle}>System Users</Text>
-          <Text style={styles.adminSubtitle}>Manage borrowers and review active accounts</Text>
+          <Text style={styles.adminSubtitle}>Manage borrowers, inspect profiles, and review accounts</Text>
         </View>
         <Pressable onPress={handleLogout} style={styles.logoutBtn}>
           <LogOut size={20} color="#EF4444" />
@@ -196,183 +566,18 @@ function AdminUsersView({ logout, theme, router }: { logout: () => void; theme: 
             </Text>
           </View>
         ) : (
-          filteredUsers.map((u: any) => {
-            const kycStyle = getKycStatusStyle(u.kycStatus);
-            const userLoans = loans.filter((l: any) => l.loan.userId === u.id);
-            const isExpanded = expandedUserId === u.id;
-            const hasActiveLoan = userLoans.some((l: any) => ['pending', 'approved', 'disbursed', 'defaulted'].includes(l.loan.status));
-
-            return (
-              <View key={u.id} style={[styles.userCard, isExpanded && styles.userCardExpanded]}>
-                {/* Compact Row */}
-                <Pressable
-                  style={styles.userCardHeader}
-                  onPress={() => setExpandedUserId(isExpanded ? null : u.id)}
-                >
-                  <View style={[styles.userAvatar, { backgroundColor: '#EEF2FF' }]}>
-                    <Text style={styles.userAvatarText}>{getInitials(u.fullName)}</Text>
-                  </View>
-                  <View style={styles.userSummaryInfo}>
-                    <Text style={styles.userNameText} numberOfLines={1}>{u.fullName || 'New User'}</Text>
-                    <Text style={styles.userMetaText}>{u.mobileNumber || 'No phone number'}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <View style={[styles.statusBadge, { backgroundColor: kycStyle.bg, marginBottom: 4 }]}>
-                      <Text style={[styles.statusBadgeText, { color: kycStyle.color }]}>
-                        KYC {u.kycStatus.toUpperCase()}
-                      </Text>
-                    </View>
-                    <Text style={styles.userLoansCountText}>
-                      {userLoans.length} loan{userLoans.length !== 1 ? 's' : ''} {hasActiveLoan && '• Active 🔵'}
-                    </Text>
-                  </View>
-                  <ChevronDown
-                    size={16}
-                    color="#94A3B8"
-                    style={{ marginLeft: 8, transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
-                  />
-                </Pressable>
-
-                {/* Expanded Details */}
-                {isExpanded && (
-                  <View style={styles.expandedDetailsContainer}>
-                    <View style={styles.expandDivider} />
-
-                    {/* Section: Personal Info */}
-                    <Text style={styles.detailSectionHeader}>Personal Information</Text>
-                    <View style={styles.detailsGrid}>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>Email</Text>
-                        <Text style={styles.detailsValue} numberOfLines={1}>{u.email}</Text>
-                      </View>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>DOB</Text>
-                        <Text style={styles.detailsValue}>{u.dob ? new Date(u.dob).toLocaleDateString('en-IN') : 'Not provided'}</Text>
-                      </View>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>Gender</Text>
-                        <Text style={styles.detailsValue}>{u.gender ? u.gender.toUpperCase() : 'Not provided'}</Text>
-                      </View>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>Emergency Contact</Text>
-                        <Text style={styles.detailsValue}>{u.emergencyContact || 'Not provided'}</Text>
-                      </View>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>Aadhaar</Text>
-                        <Text style={styles.detailsValue}>{u.aadhaarNumber || 'Not provided'}</Text>
-                      </View>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>PAN</Text>
-                        <Text style={styles.detailsValue}>{u.panNumber || 'Not provided'}</Text>
-                      </View>
-                    </View>
-
-                    {/* Section: Address Info */}
-                    <Text style={styles.detailSectionHeader}>Address</Text>
-                    <View style={styles.addressBox}>
-                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 }}>
-                        <MapPin size={14} color="#64748B" style={{ marginRight: 6, marginTop: 2 }} />
-                        <Text style={styles.addressValueText}>{u.address || 'Address not updated'}</Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 20 }}>
-                        <View>
-                          <Text style={styles.detailsLabel}>District</Text>
-                          <Text style={styles.detailsValue}>{u.district || 'N/A'}</Text>
-                        </View>
-                        <View>
-                          <Text style={styles.detailsLabel}>State</Text>
-                          <Text style={styles.detailsValue}>{u.state || 'N/A'}</Text>
-                        </View>
-                        <View>
-                          <Text style={styles.detailsLabel}>Pincode</Text>
-                          <Text style={styles.detailsValue}>{u.pincode || 'N/A'}</Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    {/* Section: Employment */}
-                    <Text style={styles.detailSectionHeader}>Employment & Financials</Text>
-                    <View style={styles.detailsGrid}>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>Occupation</Text>
-                        <Text style={styles.detailsValue}>{u.occupation || 'Not provided'}</Text>
-                      </View>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>Monthly Income</Text>
-                        <Text style={styles.detailsValue}>{u.monthlyIncome ? formatCurrency(u.monthlyIncome) : 'Not provided'}</Text>
-                      </View>
-                    </View>
-
-                    {/* Section: Bank details */}
-                    <Text style={styles.detailSectionHeader}>Bank Account & Payments</Text>
-                    <View style={styles.detailsGrid}>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>Bank Name</Text>
-                        <Text style={styles.detailsValue}>{u.bankName || 'Not provided'}</Text>
-                      </View>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>Account No</Text>
-                        <Text style={styles.detailsValue}>{u.bankAccountNo || 'Not provided'}</Text>
-                      </View>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>IFSC Code</Text>
-                        <Text style={styles.detailsValue}>{u.bankIfsc || 'Not provided'}</Text>
-                      </View>
-                      <View style={styles.detailsGridItem}>
-                        <Text style={styles.detailsLabel}>UPI ID</Text>
-                        <Text style={styles.detailsValue}>{u.upiId || 'Not provided'}</Text>
-                      </View>
-                    </View>
-
-                    {/* Section: Loans details */}
-                    <Text style={styles.detailSectionHeader}>Loans List</Text>
-                    {userLoans.length === 0 ? (
-                      <View style={styles.noLoansBox}>
-                        <Info size={14} color="#94A3B8" style={{ marginRight: 6 }} />
-                        <Text style={styles.noLoansText}>User hasn't applied for any loans yet.</Text>
-                      </View>
-                    ) : (
-                      userLoans.map((item: any) => {
-                        const { loan } = item;
-                        const loanStatus = getLoanStatusStyle(loan.status);
-                        const loanDate = new Date(loan.createdAt).toLocaleDateString('en-IN');
-                        return (
-                          <View key={loan.id} style={styles.userLoanMiniCard}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <Text style={styles.userLoanAmount}>{formatCurrency(loan.loanAmount)}</Text>
-                              <View style={[styles.statusBadge, { backgroundColor: loanStatus.bg }]}>
-                                <Text style={[styles.statusBadgeText, { color: loanStatus.color }]}>
-                                  {loan.status.toUpperCase()}
-                                </Text>
-                              </View>
-                            </View>
-                            <View style={styles.loanCardDivider} />
-                            <View style={styles.userLoanDetailsRow}>
-                              <Text style={styles.userLoanDetailCol}>Applied: {loanDate}</Text>
-                              <Text style={styles.userLoanDetailCol}>Tenure: {loan.loanDuration} Months</Text>
-                              <Text style={styles.userLoanDetailCol}>{loan.repaymentType === 'emi' ? 'EMI' : 'Full Payment'}</Text>
-                            </View>
-                            <Text style={styles.userLoanPurpose}>Purpose: {loan.loanPurpose}</Text>
-                          </View>
-                        );
-                      })
-                    )}
-
-                    {/* KYC Document Verification Quick Link */}
-                    {u.kycStatus === 'submitted' && (
-                      <Pressable
-                        style={styles.kycRedirectBtn}
-                        onPress={() => router.push({ pathname: '/(tabs)/admin', params: { tab: 'kyc' } })}
-                      >
-                        <Shield size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
-                        <Text style={styles.kycRedirectText}>Review Uploaded KYC Documents</Text>
-                      </Pressable>
-                    )}
-                  </View>
-                )}
-              </View>
-            );
-          })
+          filteredUsers.map((u: any) => (
+            <AdminUserItemCard
+              key={u.id}
+              u={u}
+              isExpanded={expandedUserId === u.id}
+              onToggleExpand={() => setExpandedUserId(expandedUserId === u.id ? null : u.id)}
+              loans={loans}
+              onOpenPreview={(url, title) => setPreviewImage({ url, title })}
+              refetchUsers={refetchUsers}
+              router={router}
+            />
+          ))
         )}
       </ScrollView>
     </KeyboardAvoidingView>
@@ -564,74 +769,161 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleDetectLocation = () => {
-    if (Platform.OS === 'web' && !navigator.geolocation) {
-      Alert.alert('Not Supported', 'Geolocation is not supported by your browser.');
-      return;
-    }
-
-    setDetectingLocation(true);
-    const geo = Platform.OS === 'web' ? navigator.geolocation : (globalThis as any).navigator?.geolocation;
-
-    if (!geo) {
-      fetchIpLocation();
-      return;
-    }
-
-    geo.getCurrentPosition(
-      async (position: any) => {
-        const { latitude, longitude } = position.coords;
-        try {
-          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`, {
-            headers: {
-              'User-Agent': 'EasyPezyCashApp/1.0'
-            }
-          });
-          const data = await response.json();
-          if (data && data.address) {
-            const addr = data.address;
-            const stateName = addr.state || '';
-            const cityName = addr.city || addr.town || addr.suburb || addr.village || addr.county || '';
-            const pinCode = addr.postcode || '';
-            const displayAddr = data.display_name || '';
-
-            if (stateName) setStateVal(stateName);
-            if (cityName) setDistrict(cityName);
-            if (pinCode) setPincode(pinCode);
-            if (displayAddr) setAddress(displayAddr);
-
-            setFieldErrors((prev) => ({ ...prev, address: '', district: '', stateVal: '', pincode: '' }));
-            Alert.alert('Success', 'Address and Pincode have been automatically detected!');
-          } else {
-            Alert.alert('Error', 'Could not resolve address details for this location.');
-          }
-        } catch (err) {
-          Alert.alert('Error', 'Failed to fetch location details.');
-        } finally {
-          setDetectingLocation(false);
+  const safeFetchJson = async (url: string) => {
+    try {
+      const res = await fetch(url);
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('application/json')) {
+        const text = await res.text();
+        if (text.trim().startsWith('{')) {
+          return JSON.parse(text);
         }
-      },
-      (error: any) => {
-        fetchIpLocation();
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
-    );
+        return null;
+      }
+      return await res.json();
+    } catch {
+      return null;
+    }
   };
 
-  const fetchIpLocation = async () => {
+  const handleDetectLocation = async (isManual = false) => {
     try {
-      const res = await fetch('https://ipapi.co/json/');
-      const data = await res.json();
-      if (data) {
+      setDetectingLocation(true);
+
+      // 1. Try Native Expo / Android System Location Provider
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        const { latitude, longitude } = location.coords;
+
+        // Perform reverse geocoding via Location.reverseGeocodeAsync
+        const geocodeResults = await Location.reverseGeocodeAsync({ latitude, longitude });
+
+        if (geocodeResults && geocodeResults.length > 0) {
+          const geo = geocodeResults[0];
+          const stateName = geo.region || geo.subregion || '';
+          const cityName = geo.city || geo.district || geo.subregion || '';
+          const pinCode = geo.postalCode || '';
+          const formattedAddress = [geo.name, geo.street, geo.subregion, geo.city, geo.region, geo.postalCode]
+            .filter(Boolean)
+            .join(', ');
+
+          if (stateName) setStateVal(stateName);
+          if (cityName) setDistrict(cityName);
+          if (pinCode) setPincode(pinCode);
+          if (formattedAddress) setAddress(formattedAddress);
+
+          setFieldErrors((prev) => ({ ...prev, address: '', district: '', stateVal: '', pincode: '' }));
+
+          if (isManual) {
+            Alert.alert('GPS Location Detected 📍', 'Address, Pincode, State, and District have been auto-filled using your device GPS!');
+          }
+          return;
+        }
+      }
+
+      // 2. Fallback to OpenStreetMap Reverse Geocoding for Web
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const { latitude, longitude } = pos.coords;
+            try {
+              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`, {
+                headers: { 'User-Agent': 'EasyPezyCashApp/1.0' }
+              });
+              const contentType = res.headers.get('content-type') || '';
+              let data: any = null;
+              if (contentType.includes('application/json')) {
+                data = await res.json();
+              }
+              if (data && data.address) {
+                const addr = data.address;
+                const stateName = addr.state || '';
+                const cityName = addr.city || addr.town || addr.suburb || addr.village || addr.county || '';
+                const pinCode = addr.postcode || '';
+                const displayAddr = data.display_name || '';
+
+                if (stateName) setStateVal(stateName);
+                if (cityName) setDistrict(cityName);
+                if (pinCode) setPincode(pinCode);
+                if (displayAddr) setAddress(displayAddr);
+
+                setFieldErrors((prev) => ({ ...prev, address: '', district: '', stateVal: '', pincode: '' }));
+                if (isManual) {
+                  Alert.alert('Success', 'Address and Pincode detected from browser location!');
+                }
+                return;
+              }
+            } catch {}
+            await fetchIpLocation(isManual);
+          },
+          () => fetchIpLocation(isManual)
+        );
+        return;
+      }
+
+      // 3. Fallback to IP Geocoding chain
+      await fetchIpLocation(isManual);
+    } catch (err) {
+      console.log('Error detecting native location', err);
+      await fetchIpLocation(isManual);
+    } finally {
+      setDetectingLocation(false);
+    }
+  };
+
+  const fetchIpLocation = async (isManual = false) => {
+    try {
+      // Provider 1: ip-api.com
+      let data = await safeFetchJson('https://ip-api.com/json');
+      if (data && data.status === 'success') {
+        if (data.regionName) setStateVal(data.regionName);
+        if (data.city) setDistrict(data.city);
+        if (data.zip) setPincode(data.zip);
+        setFieldErrors((prev) => ({ ...prev, district: '', stateVal: '', pincode: '' }));
+        if (isManual) {
+          Alert.alert('Location Auto-filled', 'State and District have been filled based on your location.');
+        }
+        return;
+      }
+
+      // Provider 2: ipwho.is
+      data = await safeFetchJson('https://ipwho.is/');
+      if (data && data.success) {
         if (data.region) setStateVal(data.region);
         if (data.city) setDistrict(data.city);
         if (data.postal) setPincode(data.postal);
         setFieldErrors((prev) => ({ ...prev, district: '', stateVal: '', pincode: '' }));
-        Alert.alert('Location Auto-filled', 'State and District have been filled based on your IP address.');
+        if (isManual) {
+          Alert.alert('Location Auto-filled', 'State and District have been filled based on your location.');
+        }
+        return;
+      }
+
+      // Provider 3: ipapi.co
+      data = await safeFetchJson('https://ipapi.co/json/');
+      if (data && !data.error) {
+        if (data.region) setStateVal(data.region);
+        if (data.city) setDistrict(data.city);
+        if (data.postal) setPincode(data.postal);
+        setFieldErrors((prev) => ({ ...prev, district: '', stateVal: '', pincode: '' }));
+        if (isManual) {
+          Alert.alert('Location Auto-filled', 'State and District have been filled based on your location.');
+        }
+        return;
+      }
+
+      if (isManual) {
+        Alert.alert('Location Alert', 'Could not auto-detect location. Please enter details manually.');
       }
     } catch (err) {
-      console.log('IP geocoding failed', err);
-      Alert.alert('Error', 'Could not detect location. Please enter details manually.');
+      console.log('IP geocoding error', err);
+      if (isManual) {
+        Alert.alert('Location Alert', 'Could not detect location. Please enter details manually.');
+      }
     } finally {
       setDetectingLocation(false);
     }
@@ -639,7 +931,7 @@ export default function ProfileScreen() {
 
   // Automatically trigger location detection on mount
   useEffect(() => {
-    handleDetectLocation();
+    handleDetectLocation(false);
   }, []);
 
   // QR Code & Selfie Document URL state
@@ -792,16 +1084,16 @@ export default function ProfileScreen() {
       errors.occupation = 'Occupation is required.';
     }
 
-    if (monthlyIncome && monthlyIncome.trim().length > 0 && (isNaN(Number(monthlyIncome)) || Number(monthlyIncome) <= 0)) {
-      errors.monthlyIncome = 'Monthly income must be a positive number.';
+    if (!monthlyIncome || isNaN(Number(monthlyIncome)) || Number(monthlyIncome) <= 0) {
+      errors.monthlyIncome = 'Monthly income is required.';
     }
 
     if (!aadhaarNumber || !/^\d{12}$/.test(aadhaarNumber)) {
       errors.aadhaarNumber = 'Aadhaar must be exactly 12 digits.';
     }
 
-    if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber.toUpperCase())) {
-      errors.panNumber = 'Invalid PAN format (e.g., ABCDE1234F)';
+    if (!panNumber || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber.toUpperCase())) {
+      errors.panNumber = 'PAN Card number is required (e.g., ABCDE1234F).';
     }
 
     if (!bankAccountNo || bankAccountNo.trim().length < 9) {
@@ -816,13 +1108,20 @@ export default function ProfileScreen() {
       errors.bankName = 'Bank name is required.';
     }
 
-    if (emergencyContact && emergencyContact.trim().length > 0 && emergencyContact.trim().length < 10) {
-      errors.emergencyContact = 'Emergency Contact must be a valid 10-digit number.';
+    if (!emergencyContact || emergencyContact.trim().length < 10) {
+      errors.emergencyContact = 'Emergency Contact number is required (min 10 digits).';
     }
 
-    // Explicit check: Either UPI ID or QR Code must be provided
-    if (!upiId && !qrCodeUrl) {
-      errors.payment = 'You must provide either a UPI ID or upload a Payment QR Code.';
+    if (!upiId || upiId.trim().length < 3) {
+      errors.upiId = 'UPI ID is required (e.g., name@paytm).';
+    }
+
+    if (!qrCodeUrl) {
+      errors.qrCode = 'Payment QR Code image upload is required.';
+    }
+
+    if (!selfieUrl) {
+      errors.selfie = 'Mandatory Profile Photo / Selfie upload is required.';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -993,7 +1292,7 @@ export default function ProfileScreen() {
             </View>
 
             <InputField
-              label="Full Name"
+              label="Full Name *"
               placeholder="John Doe"
               value={fullName}
               onChangeText={(text) => { setFullName(text); setFieldErrors({...fieldErrors, fullName: ''}); }}
@@ -1002,7 +1301,7 @@ export default function ProfileScreen() {
             />
 
             <InputField
-              label="Mobile Number"
+              label="Mobile Number *"
               placeholder="+91XXXXXXXXXX"
               keyboardType="phone-pad"
               value={mobileNumber}
@@ -1013,7 +1312,7 @@ export default function ProfileScreen() {
 
             {/* Date of Birth Picker */}
             <View style={styles.pickerFieldContainer}>
-              <Text style={styles.pickerFieldLabel}>Date of Birth</Text>
+              <Text style={styles.pickerFieldLabel}>Date of Birth *</Text>
               <View style={styles.dobRow}>
                 <Pressable
                   style={[styles.dobSelectBox, fieldErrors.dob ? { borderColor: '#EF4444' } : {}]}
@@ -1057,7 +1356,7 @@ export default function ProfileScreen() {
 
             {/* Gender Segmented Selection */}
             <View style={styles.pickerFieldContainer}>
-              <Text style={styles.pickerFieldLabel}>Gender</Text>
+              <Text style={styles.pickerFieldLabel}>Gender *</Text>
               <View style={styles.genderRow}>
                 {['male', 'female', 'other'].map((g) => (
                   <Pressable
@@ -1089,7 +1388,7 @@ export default function ProfileScreen() {
             </View>
 
             <InputField
-              label="Aadhaar Number (12 digits)"
+              label="Aadhaar Number * (12 digits)"
               placeholder="123456789012"
               keyboardType="numeric"
               maxLength={12}
@@ -1100,7 +1399,7 @@ export default function ProfileScreen() {
             />
 
             <InputField
-              label="PAN Card Number (Optional)"
+              label="PAN Card Number *"
               placeholder="ABCDE1234F"
               maxLength={10}
               autoCapitalize="characters"
@@ -1111,7 +1410,7 @@ export default function ProfileScreen() {
             />
 
             <InputField
-              label="Emergency Contact Number (Optional)"
+              label="Emergency Contact Number *"
               placeholder="9999999999"
               keyboardType="phone-pad"
               value={emergencyContact}
@@ -1126,7 +1425,7 @@ export default function ProfileScreen() {
             <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Address Details</Text>
             <Pressable 
               style={[styles.detectLocationBtn, detectingLocation && { opacity: 0.7 }]}
-              onPress={handleDetectLocation}
+              onPress={() => handleDetectLocation(true)}
               disabled={detectingLocation}
             >
               {detectingLocation ? (
@@ -1141,7 +1440,7 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.glassCard}>
             <InputField
-              label="Permanent Address"
+              label="Permanent Address *"
               placeholder="Enter home/shop address"
               multiline
               numberOfLines={2}
@@ -1153,7 +1452,7 @@ export default function ProfileScreen() {
 
             {/* Country Selector */}
             <View style={styles.pickerFieldContainer}>
-              <Text style={styles.pickerFieldLabel}>Country</Text>
+              <Text style={styles.pickerFieldLabel}>Country *</Text>
               <Pressable
                 style={styles.pickerSelectBox}
                 onPress={() => {
@@ -1170,7 +1469,7 @@ export default function ProfileScreen() {
             </View>
 
             <InputField
-              label="District"
+              label="District *"
               placeholder="Pune / Mumbai"
               value={district}
               onChangeText={(text) => { setDistrict(text); setFieldErrors({...fieldErrors, district: ''}); }}
@@ -1180,7 +1479,7 @@ export default function ProfileScreen() {
 
             {/* State Selector */}
             <View style={styles.pickerFieldContainer}>
-              <Text style={styles.pickerFieldLabel}>State</Text>
+              <Text style={styles.pickerFieldLabel}>State *</Text>
               <Pressable
                 style={[styles.pickerSelectBox, fieldErrors.stateVal ? { borderColor: '#EF4444' } : {}]}
                 onPress={() => {
@@ -1197,7 +1496,7 @@ export default function ProfileScreen() {
             </View>
 
             <InputField
-              label="Pincode (6 digits)"
+              label="Pincode * (6 digits)"
               placeholder="411001"
               keyboardType="numeric"
               maxLength={6}
@@ -1212,7 +1511,7 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Employment Details</Text>
           <View style={styles.glassCard}>
             <InputField
-              label="Occupation"
+              label="Occupation *"
               placeholder="Shopkeeper, Farmer, Driver, etc"
               value={occupation}
               onChangeText={(text) => { setOccupation(text); setFieldErrors({...fieldErrors, occupation: ''}); }}
@@ -1221,7 +1520,7 @@ export default function ProfileScreen() {
             />
 
             <InputField
-              label="Monthly Income (Optional)"
+              label="Monthly Income *"
               placeholder="25000"
               keyboardType="numeric"
               value={monthlyIncome}
@@ -1235,7 +1534,7 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Bank Account details</Text>
           <View style={styles.glassCard}>
             <InputField
-              label="Bank Name"
+              label="Bank Name *"
               placeholder="State Bank of India"
               value={bankName}
               onChangeText={(text) => { setBankName(text); setFieldErrors({...fieldErrors, bankName: ''}); }}
@@ -1244,7 +1543,7 @@ export default function ProfileScreen() {
             />
 
             <InputField
-              label="Account Number"
+              label="Account Number *"
               placeholder="30004561237"
               keyboardType="numeric"
               value={bankAccountNo}
@@ -1254,7 +1553,7 @@ export default function ProfileScreen() {
             />
 
             <InputField
-              label="IFSC Code"
+              label="IFSC Code *"
               placeholder="SBIN0001234"
               autoCapitalize="characters"
               maxLength={11}
@@ -1276,7 +1575,7 @@ export default function ProfileScreen() {
             )}
 
             <InputField
-              label="UPI ID (e.g. name@paytm)"
+              label="UPI ID * (e.g. name@paytm)"
               placeholder="someone@upi"
               value={upiId}
               onChangeText={(text) => { setUpiId(text); setFieldErrors({...fieldErrors, upiId: '', payment: ''}); }}
@@ -1285,7 +1584,7 @@ export default function ProfileScreen() {
             />
 
             <View style={styles.qrHeader}>
-              <Text style={styles.qrLabel}>QR Code Image (Optional)</Text>
+              <Text style={styles.qrLabel}>Payment QR Code Image *</Text>
             </View>
 
             {qrLoading ? (
@@ -1302,14 +1601,17 @@ export default function ProfileScreen() {
                 </Pressable>
               </View>
             ) : (
-              <Pressable onPress={handlePickQrCode} style={styles.qrUploadBox}>
+              <Pressable onPress={handlePickQrCode} style={[styles.qrUploadBox, fieldErrors.qrCode ? { borderColor: '#EF4444' } : {}]}>
                 <View style={styles.qrUploadIconBg}>
                   <QrCode size={28} color="#1A2980" />
                 </View>
-                <Text style={styles.qrUploadText}>Tap to Upload QR Code</Text>
-                <Text style={styles.qrUploadSub}>Allows admin to manually transfer funds</Text>
+                <Text style={styles.qrUploadText}>Tap to Upload QR Code *</Text>
+                <Text style={styles.qrUploadSub}>Required for admin to manually transfer funds</Text>
               </Pressable>
             )}
+            {fieldErrors.qrCode ? (
+              <Text style={[styles.errorTextSmall, { marginTop: 6 }]}>{fieldErrors.qrCode}</Text>
+            ) : null}
           </View>
 
           <PrimaryButton
