@@ -3,11 +3,9 @@ import { Platform } from 'react-native';
 import { tokenStorage } from '../utils/storage';
 
 const getApiUrl = () => {
-  if (Platform.OS === 'web') {
-    return 'http://localhost:3000/api/v1';
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
   }
- 
-  
   return 'https://epl-1-498g.onrender.com/api/v1';
 };
 

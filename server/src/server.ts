@@ -49,7 +49,9 @@ app.use("/uploads", express.static(path.resolve("./uploads")));
 const swaggerDocument = JSON.parse(
   fs.readFileSync(path.resolve("./src/config/swagger.json"), "utf8")
 );
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+app.get(["/health", "/api/v1/health"], (req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/users", userRouter);
